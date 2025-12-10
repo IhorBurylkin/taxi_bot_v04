@@ -1,0 +1,12 @@
+/.env.example
+/.history
+/config
+/docker
+/docker-compose.yml
+/docs
+/pyproject.toml
+__pycache__/
+/logs
+/devops
+/.pytest_cache
+/.github
