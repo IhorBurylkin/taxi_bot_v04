@@ -43,7 +43,7 @@ class NotificationWorker(BaseWorker):
     
     async def start(self) -> None:
         """Запускает воркер с инициализацией бота."""
-        self._bot = Bot(token=settings.telegram.bot_token)
+        self._bot = Bot(token=settings.telegram.BOT_TOKEN)
         await super().start()
     
     async def stop(self) -> None:

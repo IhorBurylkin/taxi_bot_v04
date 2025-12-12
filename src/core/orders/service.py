@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from src.common.constants import OrderStatus, DriverStatus, TypeMsg
@@ -254,16 +254,19 @@ class OrderService:
                 )
                 
                 # Публикуем событие
-                await self._event_bus.publish(DomainEvent(
-                    event_type=EventTypes.ORDER_CREATED,
-                    payload={
-                        "order_id": created.id,
-                        "passenger_id": created.passenger_id,
-                        "pickup_latitude": created.pickup_latitude,
-                        "pickup_longitude": created.pickup_longitude,
-                        "estimated_fare": created.estimated_fare,
-                    },
-                ))
+                try:
+                    await self._event_bus.publish(DomainEvent(
+                        event_type=EventTypes.ORDER_CREATED,
+                        payload={
+                            "order_id": created.id,
+                            "passenger_id": created.passenger_id,
+                            "pickup_latitude": created.pickup_latitude,
+                            "pickup_longitude": created.pickup_longitude,
+                            "estimated_fare": created.estimated_fare,
+                        },
+                    ))
+                except Exception as pub_error:
+                    await log_error(f"Не удалось опубликовать ORDER_CREATED: {pub_error}")
                 
                 await log_info(
                     f"Заказ {created.id} создан пассажиром {created.passenger_id}",
@@ -324,14 +327,17 @@ class OrderService:
                 await self._invalidate_cache(order_id)
                 
                 # Публикуем событие
-                await self._event_bus.publish(DomainEvent(
-                    event_type=EventTypes.ORDER_ACCEPTED,
-                    payload={
-                        "order_id": order_id,
-                        "driver_id": driver_id,
-                        "passenger_id": order.passenger_id,
-                    },
-                ))
+                try:
+                    await self._event_bus.publish(DomainEvent(
+                        event_type=EventTypes.ORDER_ACCEPTED,
+                        payload={
+                            "order_id": order_id,
+                            "driver_id": driver_id,
+                            "passenger_id": order.passenger_id,
+                        },
+                    ))
+                except Exception as pub_error:
+                    await log_error(f"Не удалось опубликовать ORDER_ACCEPTED: {pub_error}")
                 
                 await log_info(
                     f"Заказ {order_id} принят водителем {driver_id}",
@@ -356,7 +362,7 @@ class OrderService:
         success = await self._repo.update_status(
             order_id,
             OrderStatus.DRIVER_ARRIVED,
-            arrived_at=datetime.utcnow(),
+            arrived_at=datetime.now(timezone.utc),
         )
         
         if success:
@@ -378,7 +384,7 @@ class OrderService:
         success = await self._repo.update_status(
             order_id,
             OrderStatus.IN_PROGRESS,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc),
         )
         
         if success:
@@ -404,7 +410,7 @@ class OrderService:
                 return False
             
             kwargs = {
-                "completed_at": datetime.utcnow(),
+                "completed_at": datetime.now(timezone.utc),
             }
             if final_fare is not None:
                 kwargs["final_fare"] = final_fare
@@ -419,15 +425,18 @@ class OrderService:
                 await self._invalidate_cache(order_id)
                 
                 # Публикуем событие
-                await self._event_bus.publish(DomainEvent(
-                    event_type=EventTypes.ORDER_COMPLETED,
-                    payload={
-                        "order_id": order_id,
-                        "driver_id": order.driver_id,
-                        "passenger_id": order.passenger_id,
-                        "fare": final_fare or order.estimated_fare,
-                    },
-                ))
+                try:
+                    await self._event_bus.publish(DomainEvent(
+                        event_type=EventTypes.ORDER_COMPLETED,
+                        payload={
+                            "order_id": order_id,
+                            "driver_id": order.driver_id,
+                            "passenger_id": order.passenger_id,
+                            "fare": final_fare or order.estimated_fare,
+                        },
+                    ))
+                except Exception as pub_error:
+                    await log_error(f"Не удалось опубликовать ORDER_COMPLETED: {pub_error}")
                 
                 await log_info(
                     f"Заказ {order_id} завершён",
@@ -461,22 +470,25 @@ class OrderService:
             success = await self._repo.update_status(
                 order_id,
                 OrderStatus.CANCELLED,
-                cancelled_at=datetime.utcnow(),
+                cancelled_at=datetime.now(timezone.utc),
             )
             
             if success:
                 await self._invalidate_cache(order_id)
                 
                 # Публикуем событие
-                await self._event_bus.publish(DomainEvent(
-                    event_type=EventTypes.ORDER_CANCELLED,
-                    payload={
-                        "order_id": order_id,
-                        "driver_id": order.driver_id,
-                        "passenger_id": order.passenger_id,
-                        "cancelled_by": cancelled_by,
-                    },
-                ))
+                try:
+                    await self._event_bus.publish(DomainEvent(
+                        event_type=EventTypes.ORDER_CANCELLED,
+                        payload={
+                            "order_id": order_id,
+                            "driver_id": order.driver_id,
+                            "passenger_id": order.passenger_id,
+                            "cancelled_by": cancelled_by,
+                        },
+                    ))
+                except Exception as pub_error:
+                    await log_error(f"Не удалось опубликовать ORDER_CANCELLED: {pub_error}")
                 
                 await log_info(
                     f"Заказ {order_id} отменён ({cancelled_by})",

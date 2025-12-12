@@ -43,8 +43,9 @@ class MatchingWorker(BaseWorker):
     async def _handle_order_created(self, event: DomainEvent) -> None:
         """Обрабатывает создание нового заказа."""
         order_id = event.payload.get("order_id")
-        pickup_lat = event.payload.get("pickup_lat")
-        pickup_lon = event.payload.get("pickup_lon")
+        # Поддержка обоих вариантов ключей (для совместимости)
+        pickup_lat = event.payload.get("pickup_lat") or event.payload.get("pickup_latitude")
+        pickup_lon = event.payload.get("pickup_lon") or event.payload.get("pickup_longitude")
         
         if not all([order_id, pickup_lat, pickup_lon]):
             await log_error(
@@ -65,10 +66,9 @@ class MatchingWorker(BaseWorker):
         )
         
         # Ищем водителей
-        drivers = await matching_service.find_nearby_drivers(
-            lat=pickup_lat,
-            lon=pickup_lon,
-            excluded_driver_ids=set(),
+        drivers = await matching_service.find_drivers_incrementally(
+            latitude=pickup_lat,
+            longitude=pickup_lon,
         )
         
         if not drivers:
@@ -79,13 +79,13 @@ class MatchingWorker(BaseWorker):
             return
         
         # Отправляем уведомления первым N водителям
-        for driver_id, distance in drivers[:5]:
+        for candidate in drivers[:5]:
             await self.event_bus.publish(DomainEvent(
                 event_type=EventTypes.DRIVER_ORDER_OFFERED,
                 payload={
                     "order_id": order_id,
-                    "driver_id": driver_id,
-                    "distance": distance,
+                    "driver_id": candidate.driver_id,
+                    "distance": candidate.distance_km,
                 },
             ))
         

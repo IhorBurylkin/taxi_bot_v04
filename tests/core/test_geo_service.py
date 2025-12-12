@@ -84,7 +84,10 @@ class TestGeoService:
     @pytest.fixture
     def geo_service(self) -> GeoService:
         """Создаёт сервис с тестовым API ключом."""
-        return GeoService(api_key="test_api_key", language="ru")
+        service = GeoService(api_key="test_api_key", language="ru")
+        # Мокаем HTTP клиент чтобы избежать реальных запросов
+        service._client = AsyncMock()
+        return service
     
     def test_init_with_api_key(self, geo_service: GeoService) -> None:
         """Проверяет инициализацию с API ключом."""
@@ -111,8 +114,9 @@ class TestGeoService:
     @pytest.mark.asyncio
     async def test_geocode_success(self, geo_service: GeoService) -> None:
         """Проверяет успешное геокодирование."""
+        # Мокаем HTTP ответ
         mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_response.json = MagicMock(return_value={
             "status": "OK",
             "results": [{
                 "geometry": {
@@ -120,14 +124,12 @@ class TestGeoService:
                 },
                 "formatted_address": "Крещатик, Киев, Украина",
             }],
-        }
+        })
         
-        with patch.object(
-            geo_service._client, 'get',
-            new_callable=AsyncMock,
-            return_value=mock_response
-        ):
-            result = await geo_service.geocode("Крещатик, Киев")
+        # Мокаем метод get напрямую как AsyncMock
+        geo_service._client.get = AsyncMock(return_value=mock_response)
+        
+        result = await geo_service.geocode("Крещатик, Киев")
         
         assert result is not None
         assert result.latitude == 50.4501
@@ -137,11 +139,11 @@ class TestGeoService:
     @pytest.mark.asyncio
     async def test_geocode_no_results(self, geo_service: GeoService) -> None:
         """Проверяет геокодирование без результатов."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_response = AsyncMock()
+        mock_response.json = AsyncMock(return_value={
             "status": "ZERO_RESULTS",
             "results": [],
-        }
+        })
         
         with patch.object(
             geo_service._client, 'get',

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Awaitable
 from uuid import uuid4
 
@@ -31,7 +31,7 @@ class DomainEvent:
     """Базовый класс для доменных событий."""
     event_id: str = field(default_factory=lambda: str(uuid4()))
     event_type: str = ""
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
     payload: dict[str, Any] = field(default_factory=dict)
     
     def to_json(self) -> str:
@@ -64,6 +64,10 @@ class EventTypes:
     ORDER_CANCELLED = "order.cancelled"
     ORDER_COMPLETED = "order.completed"
     ORDER_EXPIRED = "order.expired"
+    ORDER_DRIVER_DECLINED = "order.driver_declined"
+    DRIVER_ORDER_OFFERED = "driver.order_offered"
+    DRIVER_ARRIVED = "driver.arrived"
+    RIDE_STARTED = "order.ride_started"
     
     # Водители
     DRIVER_ONLINE = "driver.online"
@@ -181,17 +185,21 @@ class EventBus:
         
         Args:
             event: Доменное событие
+            
+        Raises:
+            RuntimeError: Если нет подключения к RabbitMQ
         """
         if not self.is_connected or self._exchange is None:
-            await log_error("Не удалось опубликовать событие: нет соединения с RabbitMQ")
-            return
+            error_msg = "Не удалось опубликовать событие: нет соединения с RabbitMQ"
+            await log_error(error_msg)
+            raise RuntimeError(error_msg)
         
         try:
             message = Message(
                 body=event.to_json().encode(),
                 content_type="application/json",
                 message_id=event.event_id,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
             
             # Используем event_type как routing_key
@@ -220,10 +228,14 @@ class EventBus:
             event_type: Тип события (routing_key pattern)
             handler: Асинхронный обработчик события
             queue_name: Имя очереди (если None, генерируется автоматически)
+        
+        Raises:
+            RuntimeError: Если нет подключения к RabbitMQ
         """
         if not self.is_connected or self._channel is None or self._exchange is None:
-            await log_error("Не удалось подписаться: нет соединения с RabbitMQ")
-            return
+            error_msg = "Не удалось подписаться: нет соединения с RabbitMQ"
+            await log_error(error_msg)
+            raise RuntimeError(error_msg)
         
         # Регистрируем обработчик
         if event_type not in self._handlers:
@@ -287,10 +299,6 @@ class EventBus:
             return False
 
 
-# Глобальный экземпляр
-_event_bus: EventBus | None = None
-
-
 def get_event_bus() -> EventBus:
     """
     Возвращает глобальный экземпляр EventBus.
@@ -298,10 +306,7 @@ def get_event_bus() -> EventBus:
     Returns:
         EventBus
     """
-    global _event_bus
-    if _event_bus is None:
-        _event_bus = EventBus()
-    return _event_bus
+    return EventBus()
 
 
 async def init_event_bus() -> None:

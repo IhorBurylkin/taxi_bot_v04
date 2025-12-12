@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -65,7 +65,7 @@ def mock_config() -> dict[str, Any]:
         "WEBHOOK_HOST": "https://test.example.com",
         "WEBHOOK_PATH": "/webhook",
         "WEBAPP_HOST": "0.0.0.0",
-        "WEBAPP_PORT": 8080,
+        "WEBAPP_PORT": 8000,
         "GOOGLE_MAPS_API_KEY": "test_api_key",
         "GEOCODING_LANGUAGE": "ru",
         "DOMAIN": "test.example.com",
@@ -225,8 +225,8 @@ def sample_user_data() -> dict[str, Any]:
         "rating": 4.5,
         "trips_count": 10,
         "is_blocked": False,
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
     }
 
 
@@ -249,10 +249,10 @@ def sample_driver_data() -> dict[str, Any]:
         "total_earnings": 50000.0,
         "last_latitude": 50.4501,
         "last_longitude": 30.5234,
-        "last_seen": datetime.utcnow(),
+        "last_seen": datetime.now(timezone.utc),
         "balance_stars": 1000,
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
     }
 
 
@@ -277,7 +277,7 @@ def sample_order_data() -> dict[str, Any]:
         "status": "created",
         "payment_method": "cash",
         "payment_status": "pending",
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
         "passenger_comment": "Вызовите, когда приедете",
     }
 

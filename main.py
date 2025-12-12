@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import signal
 import sys
 from typing import Optional
 
@@ -17,6 +18,36 @@ from src.common.constants import TypeMsg
 from src.infra.database import init_db, close_db
 from src.infra.redis_client import init_redis, close_redis
 from src.infra.event_bus import init_event_bus, close_event_bus
+
+
+# Глобальный флаг для graceful shutdown
+_shutdown_event: asyncio.Event | None = None
+_running_tasks: list[asyncio.Task] = []
+
+
+def setup_signal_handlers() -> None:
+    """Настраивает обработчики сигналов для graceful shutdown."""
+    global _shutdown_event
+    _shutdown_event = asyncio.Event()
+    
+    def signal_handler(sig: int) -> None:
+        """Обработчик сигналов SIGINT и SIGTERM."""
+        if _shutdown_event and not _shutdown_event.is_set():
+            print(f"\nПолучен сигнал остановки (sig={sig}), завершаем работу...")
+            _shutdown_event.set()
+            # Отменяем все запущенные задачи
+            for task in _running_tasks:
+                if not task.done():
+                    task.cancel()
+    
+    try:
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
+    except NotImplementedError:
+        # Windows не поддерживает add_signal_handler
+        signal.signal(signal.SIGINT, lambda s, f: signal_handler(s))
+        signal.signal(signal.SIGTERM, lambda s, f: signal_handler(s))
 
 
 async def init_infrastructure() -> None:
@@ -146,7 +177,7 @@ async def run_bot() -> None:
                 await site.start()
                 
                 await log_info(
-                    f"✅ Webhook успешно настроен на {settings.telegram.WEBHOOK_URL_MAIN}",
+                    f"Webhook успешно настроен на {settings.telegram.WEBHOOK_URL_MAIN}",
                     type_msg=TypeMsg.INFO,
                 )
                 await log_info(
@@ -154,16 +185,21 @@ async def run_bot() -> None:
                     type_msg=TypeMsg.INFO,
                 )
                 
-                # Держим приложение запущенным
+                # Держим приложение запущенным до получения сигнала остановки
                 try:
-                    await asyncio.Event().wait()
+                    global _shutdown_event
+                    if _shutdown_event:
+                        await _shutdown_event.wait()
+                    else:
+                        await asyncio.Event().wait()
                 except (KeyboardInterrupt, asyncio.CancelledError):
-                    pass
+                    await log_info("Bot (webhook): получен сигнал остановки", type_msg=TypeMsg.DEBUG)
                 finally:
+                    await log_info("Bot (webhook): остановка сервера...", type_msg=TypeMsg.DEBUG)
                     await runner.cleanup()
                     
             except Exception as e:
-                await log_error(f"❌ Не удалось настроить webhook: {e}")
+                await log_error(f"Не удалось настроить webhook: {e}")
                 await log_info("Переключение на режим polling...", type_msg=TypeMsg.INFO)
                 
                 # Удаляем webhook если не удалось настроить
@@ -174,7 +210,11 @@ async def run_bot() -> None:
                 
                 # Запускаем polling
                 await log_info("Bot запущен в режиме polling", type_msg=TypeMsg.INFO)
-                await dp.start_polling(bot)
+                try:
+                    await dp.start_polling(bot)
+                except asyncio.CancelledError:
+                    await log_info("Bot (polling): получен сигнал остановки", type_msg=TypeMsg.DEBUG)
+                    raise
         else:
             # Запуск в режиме polling
             await log_info(
@@ -182,80 +222,276 @@ async def run_bot() -> None:
                 f"Запуск в режиме polling",
                 type_msg=TypeMsg.INFO
             )
-            await dp.start_polling(bot)
+            try:
+                await dp.start_polling(bot)
+            except asyncio.CancelledError:
+                await log_info("Bot (polling): получен сигнал остановки", type_msg=TypeMsg.DEBUG)
+                raise
             
+    except asyncio.CancelledError:
+        await log_info("Bot: завершение работы...", type_msg=TypeMsg.INFO)
+        raise
     finally:
+        await log_info("Bot: закрытие сессии...", type_msg=TypeMsg.DEBUG)
         await bot.session.close()
+        await log_info("Bot остановлен", type_msg=TypeMsg.INFO)
 
 
 async def run_web() -> None:
-    """Запускает Web UI."""
-    from src.web.app import run_web as start_web
+    """Запускает Web Admin (для обратной совместимости)."""
+    await log_info("УСТАРЕВШИЙ РЕЖИМ: используйте 'web_admin' вместо 'web'", type_msg=TypeMsg.WARNING)
+    await run_web_admin()
+
+
+async def run_web_admin() -> None:
+    """Запускает Web Admin UI."""
+    from src.web_admin.app import run_web as start_web_admin
     
-    await log_info("Запуск Web UI...", type_msg=TypeMsg.INFO)
-    start_web(
-        host=settings.web.host if hasattr(settings, 'web') else "0.0.0.0",
-        port=settings.web.port if hasattr(settings, 'web') else 8080,
+    await log_info("Запуск Web Admin UI...", type_msg=TypeMsg.INFO)
+    start_web_admin(
+        host=settings.telegram.WEBAPP_HOST,
+        port=settings.deployment.WEB_ADMIN_PORT,
     )
 
 
-async def run_workers() -> None:
-    """Запускает воркеры."""
-    from src.worker.runner import run_workers as start_workers
+async def run_web_client() -> None:
+    """Запускает Web Client UI."""
+    from src.web_client.app import run_web_client as start_web_client
     
-    await log_info("Запуск Workers...", type_msg=TypeMsg.INFO)
-    await start_workers()
+    await log_info("Запуск Web Client UI...", type_msg=TypeMsg.INFO)
+    start_web_client(
+        host=settings.telegram.WEBAPP_HOST,
+        port=settings.deployment.WEB_CLIENT_PORT,
+    )
 
 
-async def main(mode: str = "bot") -> None:
+async def run_notifications() -> None:
+    """Запускает сервис уведомлений."""
+    from src.notifications.app import run_notifications as start_notifications
+    
+    await log_info("Запуск Notifications сервиса...", type_msg=TypeMsg.INFO)
+    start_notifications(
+        host=settings.telegram.WEBAPP_HOST,
+        port=settings.deployment.NOTIFICATIONS_PORT,
+    )
+
+
+async def run_matching_worker() -> None:
+    """Запускает MatchingWorker для подбора водителей."""
+    from src.worker.runner import run_workers as start_matching_workers
+    
+    await log_info("Запуск MatchingWorker...", type_msg=TypeMsg.INFO)
+    
+    # При запуске через main.py инфраструктура уже инициализирована
+    # (в RUN_DEV_MODE=true или через init_infrastructure())
+    await start_matching_workers(init_infra=False)
+
+
+async def run_postgres() -> None:
+    """Запускает только PostgreSQL (для локальной разработки)."""
+    await log_info("PostgreSQL должен быть запущен через Docker", type_msg=TypeMsg.WARNING)
+    await log_info("Используйте: ./manage_docker.sh up postgres", type_msg=TypeMsg.INFO)
+
+
+async def run_redis() -> None:
+    """Запускает только Redis (для локальной разработки)."""
+    await log_info("Redis должен быть запущен через Docker", type_msg=TypeMsg.WARNING)
+    await log_info("Используйте: ./manage_docker.sh up redis", type_msg=TypeMsg.INFO)
+
+
+async def run_rabbitmq() -> None:
+    """Запускает только RabbitMQ (для локальной разработки)."""
+    await log_info("RabbitMQ должен быть запущен через Docker", type_msg=TypeMsg.WARNING)
+    await log_info("Используйте: ./manage_docker.sh up rabbitmq", type_msg=TypeMsg.INFO)
+
+
+def interactive_mode_selection() -> str:
+    """
+    Интерактивный выбор режима запуска.
+    
+    Returns:
+        Выбранный режим
+    """
+    print("\n" + "="*70)
+    print("  TAXI BOT — Выбор компонента для запуска")
+    print("="*70)
+    print("\nДоступные компоненты:")
+    print("  1. bot            — Telegram Bot (основной бот)")
+    print("  2. web_admin      — Web Admin UI (панель администратора)")
+    print("  3. web_client     — Web Client UI (клиентский интерфейс)")
+    print("  4. notifications  — Notifications Service (HTTP API + NotificationWorker)")
+    print("  5. matching_worker — MatchingWorker (подбор водителей)")
+    print("  6. all            — Все компоненты одновременно")
+    print("\n  Инфраструктура (только через Docker):")
+    print("  7. postgres       — PostgreSQL (через Docker)")
+    print("  8. redis          — Redis (через Docker)")
+    print("  9. rabbitmq       — RabbitMQ (через Docker)")
+    print("\n" + "="*70)
+    
+    mode_map = {
+        "1": "bot",
+        "2": "web_admin",
+        "3": "web_client",
+        "4": "notifications",
+        "5": "matching_worker",
+        "6": "all",
+        "7": "postgres",
+        "8": "redis",
+        "9": "rabbitmq",
+    }
+    
+    valid_modes = set(mode_map.values()) | set(mode_map.keys()) | {"web", "worker"}  # web, worker для обратной совместимости
+    
+    while True:
+        choice = input("\nВыберите компонент (1-6) или название: ").strip().lower()
+        
+        if choice in mode_map:
+            return mode_map[choice]
+        elif choice in valid_modes:
+            return choice
+        else:
+            print("❌ Неверный выбор. Попробуйте снова.")
+
+
+async def main(mode: str | None = None) -> None:
     """
     Главная функция запуска.
     
     Args:
-        mode: Режим запуска (bot, web, worker, all)
+        mode: Режим запуска (bot, web, worker, all). 
+              Если None, определяется из настроек или интерактивно.
     """
+    global _running_tasks
+    
     setup_logging()
-    await log_info(f"Taxi Bot v0.1.0 — запуск в режиме '{mode}'", type_msg=TypeMsg.INFO)
+    setup_signal_handlers()
+    
+    # Определяем режим запуска
+    if mode is None:
+        # Проверяем RUN_DEV_MODE
+        if settings.system.RUN_DEV_MODE:
+            # Режим разработчика: запускаем все компоненты
+            mode = "all"
+            await log_info(
+                "🔧 RUN_DEV_MODE включен — запуск всех компонентов",
+                type_msg=TypeMsg.INFO
+            )
+        else:
+            # Проверяем переменную окружения COMPONENT_MODE (для Docker)
+            component_mode = settings.system.COMPONENT_MODE
+            valid_modes = ("bot", "web", "web_admin", "web_client", "notifications", 
+                          "matching_worker", "worker", "postgres", "redis", "rabbitmq", "all")
+            if component_mode and component_mode in valid_modes:
+                mode = component_mode
+                await log_info(
+                    f"🐳 Docker режим — запуск компонента '{mode}'",
+                    type_msg=TypeMsg.INFO
+                )
+            else:
+                # Интерактивный выбор
+                mode = interactive_mode_selection()
+    
+    await log_info(
+        f"Taxi Bot v{settings.system.VERSION} — запуск в режиме '{mode}'",
+        type_msg=TypeMsg.INFO
+    )
     
     try:
-        # Запуск тестов при старте, если включено в конфиге
+        # Сначала инициализируем инфраструктуру (критично для работы приложения и тестов)
+        await init_infrastructure()
+        await warmup_cache()
+        
+        # Запуск тестов при старте, если включено в конфиге (ПОСЛЕ инициализации)
         run_tests_flag = settings.system.RUN_TESTS_ON_STARTUP
         await log_info(f"RUN_TESTS_ON_STARTUP = {run_tests_flag}", type_msg=TypeMsg.DEBUG)
         
         if run_tests_flag:
+            await log_info("Запуск тестов (инфраструктура уже инициализирована)...", type_msg=TypeMsg.INFO)
             tests_passed = await run_tests()
             if not tests_passed:
                 await log_error("❌ Тесты не прошли. Остановка запуска приложения.")
+                await close_infrastructure()
                 sys.exit(1)
         else:
             await log_info("Пропуск запуска тестов (RUN_TESTS_ON_STARTUP=false)", type_msg=TypeMsg.DEBUG)
         
-        await init_infrastructure()
-        await warmup_cache()
-        
         if mode == "bot":
             await run_bot()
         elif mode == "web":
-            await run_web()
-        elif mode == "worker":
-            await run_workers()
+            await run_web()  # Обратная совместимость
+        elif mode == "web_admin":
+            await run_web_admin()
+        elif mode == "web_client":
+            await run_web_client()
+        elif mode == "notifications":
+            await run_notifications()
+        elif mode == "matching_worker" or mode == "worker":  # worker для обратной совместимости
+            await run_matching_worker()
+        elif mode == "postgres":
+            await run_postgres()
+        elif mode == "redis":
+            await run_redis()
+        elif mode == "rabbitmq":
+            await run_rabbitmq()
         elif mode == "all":
             # Параллельный запуск всех компонентов
-            await asyncio.gather(
-                run_bot(),
-                run_workers(),
-                # Web запускается отдельно из-за blocking event loop
-            )
+            # Важно: при RUN_DEV_MODE=true инфраструктура уже инициализирована выше
+            await log_info("Запуск всех компонентов параллельно (RUN_DEV_MODE)...", type_msg=TypeMsg.INFO)
+            
+            global _running_tasks
+            # Создаем задачи для асинхронных компонентов
+            bot_task = asyncio.create_task(run_bot())
+            worker_task = asyncio.create_task(run_matching_worker())
+            _running_tasks = [bot_task, worker_task]
+            
+            try:
+                # Запускаем асинхронные компоненты с return_exceptions для корректной отмены
+                await asyncio.gather(
+                    bot_task,
+                    worker_task,
+                    return_exceptions=True,
+                    # Web и Notifications запускаются отдельно из-за blocking event loop
+                    # Они должны быть запущены в отдельных процессах/контейнерах
+                )
+            except asyncio.CancelledError:
+                await log_info("Отмена всех задач...", type_msg=TypeMsg.INFO)
+                # Отменяем все задачи
+                for task in _running_tasks:
+                    if not task.done():
+                        task.cancel()
+                # Ждем завершения отмены
+                await asyncio.gather(*_running_tasks, return_exceptions=True)
+                raise
+            
+            # Примечание: в режиме RUN_DEV_MODE рекомендуется использовать Docker Compose
+            # для запуска Web Admin, Web Client и Notifications в отдельных контейнерах
         else:
             await log_error(f"Неизвестный режим: {mode}")
             
     except KeyboardInterrupt:
         await log_info("Получен сигнал остановки (Ctrl+C)", type_msg=TypeMsg.INFO)
+    except asyncio.CancelledError:
+        await log_info("Задача отменена, выполняется graceful shutdown", type_msg=TypeMsg.INFO)
     except Exception as e:
         await log_error(f"Критическая ошибка: {e}")
         raise
     finally:
-        await close_infrastructure()
+        # Отменяем все оставшиеся задачи
+        if _running_tasks:
+            await log_info("Отмена оставшихся задач...", type_msg=TypeMsg.DEBUG)
+            for task in _running_tasks:
+                if not task.done():
+                    task.cancel()
+            # Ждем завершения всех задач
+            await asyncio.gather(*_running_tasks, return_exceptions=True)
+            _running_tasks.clear()
+        
+        await log_info("Завершение работы, закрытие подключений...", type_msg=TypeMsg.INFO)
+        try:
+            await close_infrastructure()
+        except Exception as e:
+            await log_error(f"Ошибка при закрытии подключений: {e}")
+        await log_info("Приложение остановлено", type_msg=TypeMsg.INFO)
 
 
 def print_usage() -> None:
@@ -267,15 +503,24 @@ Taxi Bot — Модульный монолит для такси-сервиса
     python main.py [mode]
 
 Режимы:
-    bot     — Запуск Telegram Bot (по умолчанию)
-    web     — Запуск Web Admin UI
-    worker  — Запуск фоновых воркеров
-    all     — Запуск всех компонентов
+    bot            — Запуск Telegram Bot
+    web_admin      — Запуск Web Admin UI (панель администратора)
+    web_client     — Запуск Web Client UI (клиентский интерфейс)
+    notifications  — Запуск Notifications Service (HTTP API + NotificationWorker)
+    matching_worker — Запуск MatchingWorker (подбор водителей)
+    all            — Запуск всех компонентов одновременно
+    
+Инфраструктура (только через Docker):
+    postgres       — PostgreSQL database
+    redis          — Redis cache
+    rabbitmq       — RabbitMQ message broker
 
 Примеры:
-    python main.py
-    python main.py bot
-    python main.py worker
+    python main.py                  # Автоматический режим
+    python main.py bot              # Только Telegram Bot
+    python main.py web_admin        # Только Admin UI
+    python main.py web_client       # Только Client UI
+    python main.py matching_worker  # Только MatchingWorker
     
 Docker:
     docker-compose up -d
@@ -283,15 +528,16 @@ Docker:
 
 
 if __name__ == "__main__":
-    # Определяем режим из аргументов
-    mode = "bot"
+    # Определяем режим из аргументов командной строки
+    mode = None  # Будет определен автоматически в main()
     
     if len(sys.argv) > 1:
         arg = sys.argv[1].lower()
         if arg in ("--help", "-h"):
             print_usage()
             sys.exit(0)
-        elif arg in ("bot", "web", "worker", "all"):
+        elif arg in ("bot", "web", "web_admin", "web_client", "notifications", 
+                     "matching_worker", "worker", "postgres", "redis", "rabbitmq", "all"):
             mode = arg
         else:
             print(f"Ошибка: неизвестный режим '{arg}'")

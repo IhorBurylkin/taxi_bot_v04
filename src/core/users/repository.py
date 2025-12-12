@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from src.common.constants import UserRole, DriverStatus
@@ -81,7 +81,7 @@ class UserRepository:
             Созданный пользователь или None
         """
         try:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             await self._db.execute(
                 """
@@ -143,7 +143,7 @@ class UserRepository:
                 user.rating,
                 user.trips_count,
                 user.is_blocked,
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
             )
             
             return True
@@ -171,7 +171,7 @@ class UserRepository:
                 """,
                 user_id,
                 role.value,
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
             )
             
             return True
@@ -255,7 +255,7 @@ class DriverRepository:
             Созданный профиль или None
         """
         try:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             await self._db.execute(
                 """
@@ -315,7 +315,7 @@ class DriverRepository:
                 """,
                 user_id,
                 status.value,
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
             )
             
             return True
@@ -341,7 +341,7 @@ class DriverRepository:
             True если успешно
         """
         try:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             await self._db.execute(
                 """

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from src.common.constants import OrderStatus, PaymentMethod, PaymentStatus
@@ -270,7 +270,7 @@ class OrderRepository:
                 order_id,
                 driver_id,
                 OrderStatus.ACCEPTED.value,
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
             )
             
             return True

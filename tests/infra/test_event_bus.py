@@ -148,6 +148,7 @@ class TestEventBus:
         mock_connection = MagicMock()
         mock_connection.is_closed = False
         event_bus._connection = mock_connection
+        event_bus._channel = MagicMock()
         
         assert event_bus.is_connected is True
     
@@ -240,8 +241,9 @@ class TestEventBus:
         
         event = DomainEvent(event_type=EventTypes.ORDER_CREATED)
         
-        # Не должно вызывать исключений
-        await event_bus.publish(event)
+        # Должно бросить RuntimeError
+        with pytest.raises(RuntimeError, match="нет соединения с RabbitMQ"):
+            await event_bus.publish(event)
     
     @pytest.mark.asyncio
     async def test_subscribe(self, event_bus: EventBus) -> None:

@@ -44,13 +44,28 @@ cp .env.example .env
 # Заполните .env своими значениями
 ```
 
-### 2. Запуск через Docker Compose
+### 2. Запуск через Docker Compose (рекомендуется)
 
 ```bash
-docker-compose up -d
+# Запустить всё (инфраструктура + приложения)
+./manage_docker.sh up
+
+# ИЛИ поэтапно:
+./manage_docker.sh up infra   # PostgreSQL, Redis, RabbitMQ
+./manage_docker.sh up app      # Bot, Web, Workers, Notifications
+
+# Проверить статус
+./manage_docker.sh status
+
+# Логи
+./manage_docker.sh logs bot
 ```
 
+**Подробнее:** [Docker Quick Start](docs/docker_quickstart.md)
+
 ### 3. Запуск для разработки
+
+#### Вариант 1: Фоновый режим (рекомендуется)
 
 ```bash
 # Создание виртуального окружения
@@ -60,9 +75,61 @@ source .venv/bin/activate
 # Установка зависимостей
 pip install -r requirements.txt
 
-# Запуск
-python main.py
+# Запуск инфраструктуры в Docker
+./manage_docker.sh up infra
+
+# Запуск всех компонентов в фоне
+./run_dev.sh start        # Запуск
+./run_dev.sh status       # Проверка статуса
+./run_dev.sh logs         # Просмотр логов
+./run_dev.sh restart      # Перезапуск
+./run_dev.sh stop         # Остановка
 ```
+
+**Подробнее:** [Использование run_dev.sh](docs/run_dev_usage.md)
+
+#### Вариант 2: Интерактивный режим
+
+```bash
+# Запуск приложения в текущем терминале (Ctrl+C для остановки)
+python entrypoint_all.py  # Все компоненты
+python main.py            # Интерактивный выбор
+python main.py bot        # Только Telegram Bot
+python main.py web_admin  # Только Admin UI
+python main.py web_client # Только Client UI
+python main.py notifications  # Только Notifications
+python main.py matching_worker # Только MatchingWorker
+
+# Инфраструктура (только через Docker)
+python main.py postgres   # Подсказка для запуска PostgreSQL
+python main.py redis      # Подсказка для запуска Redis
+python main.py rabbitmq   # Подсказка для запуска RabbitMQ
+```
+
+## Модульная Docker-архитектура
+
+Проект использует модульную архитектуру с разделением на:
+
+### Инфраструктура (docker-compose.infra.yml)
+- **PostgreSQL 16** — база данных
+- **Redis 7** — кэш и Geo-индекс
+- **RabbitMQ 3.12** — брокер сообщений
+
+### Приложения (docker-compose.app.yml)
+- **Nginx** — reverse proxy (порт 8080)
+- **Telegram Bot** — основной бот (интерактивное взаимодействие)
+- **Web Admin** — панель администратора (порт 8081)
+- **Web Client** — клиентский интерфейс, 2 экземпляра (8082, 8092)
+- **Notifications** — HTTP API + NotificationWorker (порт 8083, отправка уведомлений)
+- **MatchingWorkers** — подбор водителей, 2 экземпляра
+
+**Преимущества:**
+- ✅ Независимое масштабирование компонентов
+- ✅ Изолированные обновления и развертывание
+- ✅ Возможность использования managed-сервисов (AWS RDS, Redis Cloud)
+- ✅ Упрощенное тестирование и отладка
+
+**Подробнее:** [Модульная Docker-архитектура](docs/docker_modular_architecture.md)
 
 ## Конфигурация
 

@@ -1,6 +1,7 @@
-# src/web/app.py
+# src/web_client/app.py
 """
-NiceGUI приложение для админ-панели и мониторинга.
+NiceGUI приложение для клиентского веб-интерфейса.
+Предоставляет UI для пассажиров и водителей.
 """
 
 from __future__ import annotations
@@ -16,30 +17,30 @@ from src.common.constants import TypeMsg
 
 
 def create_app() -> None:
-    """Создаёт и конфигурирует NiceGUI приложение."""
+    """Создаёт и конфигурирует NiceGUI приложение для клиентов."""
     
     # Регистрируем маршруты
-    from src.web.views import dashboard, orders, drivers, health
+    from src.web_client.views import home, order, profile, tracking
     
     # Инициализация при старте
     @app.on_startup
     async def startup() -> None:
-        """Инициализация при старте веб-приложения."""
-        await log_info("Web UI запущен", type_msg=TypeMsg.INFO)
+        """Инициализация при старте веб-клиента."""
+        await log_info("Web Client запущен", type_msg=TypeMsg.INFO)
     
     @app.on_shutdown
     async def shutdown() -> None:
         """Очистка ресурсов при остановке."""
-        await log_info("Web UI остановлен", type_msg=TypeMsg.INFO)
+        await log_info("Web Client остановлен", type_msg=TypeMsg.INFO)
 
 
-def run_web(
+def run_web_client(
     host: str = "0.0.0.0",
-    port: int = 8080,
+    port: int = 8082,
     reload: bool = False,
 ) -> None:
     """
-    Запускает веб-сервер.
+    Запускает веб-сервер для клиентов.
     
     Args:
         host: Хост для привязки
@@ -51,6 +52,6 @@ def run_web(
         host=host,
         port=port,
         reload=reload,
-        title="Taxi Bot Admin",
+        title="Taxi Bot — Заказ такси",
         favicon="🚕",
     )

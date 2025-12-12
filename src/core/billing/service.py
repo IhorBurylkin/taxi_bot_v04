@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from src.common.constants import PaymentStatus, PaymentMethod, TypeMsg
@@ -111,17 +111,20 @@ class BillingService:
                 await self._update_driver_balance(driver_id, driver_earnings)
             
             # Публикуем событие
-            await self._event_bus.publish(DomainEvent(
-                event_type=EventTypes.PAYMENT_COMPLETED,
-                payload={
-                    "order_id": order_id,
-                    "driver_id": driver_id,
-                    "amount": amount,
-                    "commission": commission,
-                    "driver_earnings": driver_earnings,
-                    "payment_method": payment_method.value,
-                },
-            ))
+            try:
+                await self._event_bus.publish(DomainEvent(
+                    event_type=EventTypes.PAYMENT_COMPLETED,
+                    payload={
+                        "order_id": order_id,
+                        "driver_id": driver_id,
+                        "amount": amount,
+                        "commission": commission,
+                        "driver_earnings": driver_earnings,
+                        "payment_method": payment_method.value,
+                    },
+                ))
+            except Exception as pub_error:
+                await log_error(f"Не удалось опубликовать PAYMENT_COMPLETED: {pub_error}")
             
             await log_info(
                 f"Платёж обработан: заказ {order_id}, сумма {amount}, водитель {driver_id}",
@@ -135,14 +138,17 @@ class BillingService:
         except Exception as e:
             await log_error(f"Ошибка обработки платежа: {e}")
             
-            await self._event_bus.publish(DomainEvent(
-                event_type=EventTypes.PAYMENT_FAILED,
-                payload={
-                    "order_id": order_id,
-                    "driver_id": driver_id,
-                    "error": str(e),
-                },
-            ))
+            try:
+                await self._event_bus.publish(DomainEvent(
+                    event_type=EventTypes.PAYMENT_FAILED,
+                    payload={
+                        "order_id": order_id,
+                        "driver_id": driver_id,
+                        "error": str(e),
+                    },
+                ))
+            except Exception as pub_error:
+                await log_error(f"Не удалось опубликовать событие PAYMENT_FAILED: {pub_error}")
             
             return PaymentResult(
                 success=False,
@@ -215,7 +221,7 @@ class BillingService:
                 driver_id,
                 stars,
                 float(stars),  # Добавляем к общему заработку
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
             )
             
             await log_info(
@@ -271,7 +277,7 @@ class BillingService:
                 """,
                 driver_id,
                 stars,
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
             )
             
             await log_info(
@@ -318,7 +324,7 @@ class BillingService:
                 earnings,
                 payment_method.value,
                 PaymentStatus.COMPLETED.value,
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
             )
             
             return transaction_id
@@ -342,7 +348,7 @@ class BillingService:
                 """,
                 driver_id,
                 amount,
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
             )
             return True
         except Exception as e:

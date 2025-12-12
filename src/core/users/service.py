@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from src.common.constants import UserRole, DriverStatus, TypeMsg
@@ -247,10 +247,13 @@ class UserService:
             await self._redis.delete(self._driver_cache_key(user_id))
             
             # Публикуем событие
-            await self._event_bus.publish(DomainEvent(
-                event_type=EventTypes.DRIVER_ONLINE,
-                payload={"driver_id": user_id},
-            ))
+            try:
+                await self._event_bus.publish(DomainEvent(
+                    event_type=EventTypes.DRIVER_ONLINE,
+                    payload={"driver_id": user_id},
+                ))
+            except Exception as pub_error:
+                await log_error(f"Не удалось опубликовать DRIVER_ONLINE: {pub_error}")
             
             await log_info(f"Водитель {user_id} вышел на линию", type_msg=TypeMsg.INFO)
         
@@ -277,10 +280,13 @@ class UserService:
             await self._redis.georem("drivers:locations", str(user_id))
             
             # Публикуем событие
-            await self._event_bus.publish(DomainEvent(
-                event_type=EventTypes.DRIVER_OFFLINE,
-                payload={"driver_id": user_id},
-            ))
+            try:
+                await self._event_bus.publish(DomainEvent(
+                    event_type=EventTypes.DRIVER_OFFLINE,
+                    payload={"driver_id": user_id},
+                ))
+            except Exception as pub_error:
+                await log_error(f"Не удалось опубликовать DRIVER_OFFLINE: {pub_error}")
             
             await log_info(f"Водитель {user_id} ушёл с линии", type_msg=TypeMsg.INFO)
         
@@ -317,7 +323,7 @@ class UserService:
                 from src.config import settings
                 await self._redis.set(
                     f"driver:last_seen:{dto.driver_id}",
-                    datetime.utcnow().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                     ttl=settings.redis_ttl.LAST_SEEN_TTL,
                 )
                 

@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -53,6 +53,42 @@ class SystemSettings(BaseModel):
     LOG_LEVEL: str = "DEBUG"
     ENVIRONMENT: str = "development"
     RUN_TESTS_ON_STARTUP: bool = False
+    RUN_DEV_MODE: bool = True
+    COMPONENT_MODE: str = "all"
+
+
+class DeploymentSettings(BaseModel):
+    """Настройки развертывания компонентов."""
+    # Устаревшие компоненты (обратная совместимость)
+    WEB_ADMIN_INSTANCES_COUNT: int = 1
+    WEB_ADMIN_PORT: int = 8081
+    WEB_CLIENT_INSTANCES_COUNT: int = 1
+    WEB_CLIENT_PORT: int = 8082
+    NOTIFICATIONS_INSTANCES_COUNT: int = 1
+    NOTIFICATIONS_PORT: int = 8083
+    BOT_INSTANCES_COUNT: int = 1
+    BOT_WEBAPP_PORT: int = 8000
+    WORKER_INSTANCES_COUNT: int = 1
+    MATCHING_WORKER_INSTANCES_COUNT: int = 1
+    NGINX_PORT: int = 8080
+    
+    # Новые микросервисы (v0.5.0)
+    USERS_SERVICE_PORT: int = 8084
+    USERS_SERVICE_INSTANCES_COUNT: int = 1
+    TRIP_SERVICE_PORT: int = 8085
+    TRIP_SERVICE_INSTANCES_COUNT: int = 1
+    PRICING_SERVICE_PORT: int = 8086
+    PRICING_SERVICE_INSTANCES_COUNT: int = 1
+    PAYMENTS_SERVICE_PORT: int = 8087
+    PAYMENTS_SERVICE_INSTANCES_COUNT: int = 1
+    MINIAPP_BFF_PORT: int = 8088
+    MINIAPP_BFF_INSTANCES_COUNT: int = 1
+    REALTIME_WS_GATEWAY_PORT: int = 8089
+    REALTIME_WS_GATEWAY_INSTANCES_COUNT: int = 1
+    REALTIME_LOCATION_INGEST_PORT: int = 8090
+    REALTIME_LOCATION_INGEST_INSTANCES_COUNT: int = 1
+    ORDER_MATCHING_SERVICE_PORT: int = 8091
+    ORDER_MATCHING_SERVICE_INSTANCES_COUNT: int = 1
 
 
 class TelegramLogTarget(BaseModel):
@@ -75,6 +111,7 @@ class TelegramLogTarget(BaseModel):
 
 class LoggingSettings(BaseModel):
     """Настройки логирования."""
+    LOG_LEVEL: str = "DEBUG"
     LOG_TO_FILE: bool = True
     LOG_FILE_PATH: str = "logs/app.log"
     LOG_TO_TELEGRAM: bool = False
@@ -85,7 +122,7 @@ class LoggingSettings(BaseModel):
     LOG_TELEGRAM_ORDERS_CHAT_ID: TelegramLogTarget | None = None
     LOG_TELEGRAM_SUPPORT_CHAT_ID: TelegramLogTarget | None = None
     LOG_TELEGRAM_SERVER_LOGS_CHAT_ID: TelegramLogTarget | None = None
-    LOG_FORMAT: str = "json"
+    LOG_FORMAT: str = "colored"
     LOG_MAX_BYTES: int = 10485760
     LOG_BACKUP_COUNT: int = 5
 
@@ -116,7 +153,7 @@ class TelegramSettings(BaseModel):
     WEBHOOK_URL_LOGGER: str | None = None
     WEBHOOK_SECRET: str | None = None
     WEBAPP_HOST: str = "0.0.0.0"
-    WEBAPP_PORT: int = 8080
+    WEBAPP_PORT: int = 8000
 
     @field_validator("BOT_TOKEN", "ADMIN_BOT_TOKEN", mode="before")
     @classmethod
@@ -126,6 +163,17 @@ class TelegramSettings(BaseModel):
             env_key = info.field_name
             return os.getenv(env_key, "")
         return v
+
+    @model_validator(mode='after')
+    def compute_webhook_urls(self) -> "TelegramSettings":
+        """Вычисляет URL вебхуков, если они не заданы."""
+        if not self.WEBHOOK_URL_MAIN and self.BOT_TOKEN and self.WEBHOOK_HOST:
+            self.WEBHOOK_URL_MAIN = f"{self.WEBHOOK_HOST}{self.WEBHOOK_PATH}/{self.BOT_TOKEN}"
+        
+        if not self.WEBHOOK_URL_LOGGER and self.ADMIN_BOT_TOKEN and self.WEBHOOK_HOST:
+            self.WEBHOOK_URL_LOGGER = f"{self.WEBHOOK_HOST}{self.WEBHOOK_PATH}/{self.ADMIN_BOT_TOKEN}"
+            
+        return self
 
 
 class GoogleMapsSettings(BaseModel):
@@ -296,6 +344,7 @@ class Settings(BaseSettings):
     Агрегирует все секции конфигурации.
     """
     system: SystemSettings = Field(default_factory=SystemSettings)
+    deployment: DeploymentSettings = Field(default_factory=DeploymentSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     telegram: TelegramSettings = Field(default_factory=TelegramSettings)
     google_maps: GoogleMapsSettings = Field(default_factory=GoogleMapsSettings)
@@ -334,6 +383,14 @@ class Settings(BaseSettings):
                 LOG_LEVEL=filtered_data.get("LOG_LEVEL", "DEBUG"),
                 ENVIRONMENT=filtered_data.get("ENVIRONMENT", "development"),
                 RUN_TESTS_ON_STARTUP=filtered_data.get("RUN_TESTS_ON_STARTUP", False),
+                RUN_DEV_MODE=filtered_data.get("RUN_DEV_MODE", True),
+                COMPONENT_MODE=os.getenv("COMPONENT_MODE", filtered_data.get("COMPONENT_MODE", "all")),
+            ),
+            deployment=DeploymentSettings(
+                WEB_INSTANCES_COUNT=filtered_data.get("WEB_INSTANCES_COUNT", 1),
+                WEB_BASE_PORT=filtered_data.get("WEB_BASE_PORT", 8080),
+                BOT_INSTANCES_COUNT=filtered_data.get("BOT_INSTANCES_COUNT", 1),
+                WORKER_INSTANCES_COUNT=filtered_data.get("WORKER_INSTANCES_COUNT", 1),
             ),
             logging=LoggingSettings(
                 LOG_TO_FILE=filtered_data.get("LOG_TO_FILE", True),
@@ -351,19 +408,19 @@ class Settings(BaseSettings):
                 LOG_BACKUP_COUNT=filtered_data.get("LOG_BACKUP_COUNT", 5),
             ),
             telegram=TelegramSettings(
-                BOT_TOKEN=filtered_data.get("BOT_TOKEN", ""),
-                ADMIN_BOT_TOKEN=filtered_data.get("ADMIN_BOT_TOKEN", ""),
+                BOT_TOKEN=os.getenv("BOT_TOKEN", filtered_data.get("BOT_TOKEN", "")),
+                ADMIN_BOT_TOKEN=os.getenv("ADMIN_BOT_TOKEN", filtered_data.get("ADMIN_BOT_TOKEN", "")),
                 USE_WEBHOOK=filtered_data.get("USE_WEBHOOK", False),
                 WEBHOOK_HOST=filtered_data.get("WEBHOOK_HOST", "https://example.com"),
                 WEBHOOK_PATH=filtered_data.get("WEBHOOK_PATH", "/webhook"),
                 WEBHOOK_URL_MAIN=filtered_data.get("WEBHOOK_URL_MAIN"),
                 WEBHOOK_URL_LOGGER=filtered_data.get("WEBHOOK_URL_LOGGER"),
-                WEBHOOK_SECRET=filtered_data.get("WEBHOOK_SECRET"),
+                WEBHOOK_SECRET=os.getenv("WEBHOOK_SECRET", filtered_data.get("WEBHOOK_SECRET")),
                 WEBAPP_HOST=filtered_data.get("WEBAPP_HOST", "0.0.0.0"),
-                WEBAPP_PORT=filtered_data.get("WEBAPP_PORT", 8080),
+                WEBAPP_PORT=filtered_data.get("WEBAPP_PORT", filtered_data.get("BOT_WEBAPP_PORT", 8000)),
             ),
             google_maps=GoogleMapsSettings(
-                GOOGLE_MAPS_API_KEY=filtered_data.get("GOOGLE_MAPS_API_KEY", ""),
+                GOOGLE_MAPS_API_KEY=os.getenv("GOOGLE_MAPS_API_KEY", filtered_data.get("GOOGLE_MAPS_API_KEY", "")),
                 GEOCODING_LANGUAGE=filtered_data.get("GEOCODING_LANGUAGE", "ru"),
             ),
             domain=DomainSettings(

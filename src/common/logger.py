@@ -9,13 +9,30 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
 from src.common.constants import TypeMsg
+
+
+# =============================================================================
+# ГЛОБАЛЬНАЯ ПЕРЕМЕННАЯ ДЛЯ ВРЕМЕНИ СТАРТА
+# =============================================================================
+
+# Время запуска приложения (устанавливается один раз при импорте модуля)
+_APP_START_DATETIME: str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+# Глобальный файловый хендлер (один для всех логгеров)
+_GLOBAL_FILE_HANDLER: logging.Handler | None = None
+# Глобальный хендлер ошибок
+_GLOBAL_ERROR_HANDLER: logging.Handler | None = None
+
+# Флаг инициализации (предотвращает повторную настройку)
+_LOGGING_INITIALIZED: bool = False
 
 
 # =============================================================================
@@ -28,7 +45,7 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Форматирует запись лога в JSON."""
         log_data = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -48,6 +65,79 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(log_data, ensure_ascii=False, default=str)
 
 
+class DateBasedRotatingFileHandler(RotatingFileHandler):
+    """
+    Хендлер для ротации логов.
+    Пишет в фиксированный файл (например, taxi_bot.log).
+    При ротации переименовывает текущий файл, добавляя дату и время.
+    """
+    
+    def __init__(self, log_dir: str, max_bytes: int, logger_name: str = "app", encoding: str = 'utf-8'):
+        """
+        Args:
+            log_dir: Директория для логов
+            max_bytes: Максимальный размер файла в байтах
+            logger_name: Имя логгера (используется в имени файла)
+            encoding: Кодировка файла
+        """
+        self.log_dir = Path(log_dir)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.logger_name = logger_name
+        
+        # Фиксированное имя файла
+        filename = str(self.log_dir / f"{logger_name}.log")
+        
+        # Инициализируем родительский класс без ротации (backupCount=0)
+        super().__init__(
+            filename=filename,
+            maxBytes=max_bytes,
+            backupCount=0,  # Отключаем стандартную ротацию
+            encoding=encoding,
+        )
+    
+    def shouldRollover(self, record: logging.LogRecord) -> bool:
+        """
+        Проверяет, нужна ли ротация.
+        
+        Ротация происходит только при превышении размера файла.
+        """
+        # Проверяем размер файла
+        if self.maxBytes > 0:
+            if self.stream is None:
+                self.stream = self._open()
+            self.stream.seek(0, 2)  # Переходим в конец файла
+            if self.stream.tell() >= self.maxBytes:
+                return True
+        
+        return False
+    
+    def doRollover(self) -> None:
+        """
+        Выполняет ротацию лог-файла.
+        
+        Переименовывает текущий файл в архивный и открывает новый.
+        """
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+        
+        # Генерируем имя для архива
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        archive_filename = self.log_dir / f"{self.logger_name}_{timestamp}.log"
+        
+        # Переименовываем текущий файл
+        if os.path.exists(self.baseFilename):
+            try:
+                os.rename(self.baseFilename, archive_filename)
+            except OSError:
+                # Если не удалось переименовать (например, файл занят),
+                # просто продолжаем (или можно добавить логику повтора)
+                pass
+        
+        # Открываем новый файл (создастся заново)
+        self.stream = self._open()
+
+
 class ColoredFormatter(logging.Formatter):
     """Цветной форматтер для консоли (разработка)."""
 
@@ -64,7 +154,7 @@ class ColoredFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """Форматирует запись лога с цветом."""
-        color = self.COLORS.get(record.levelname, self.RESET)
+        color = self.COLORS.get(record.levelname, self.GRAY)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # Формируем caller info, если есть
@@ -91,6 +181,8 @@ class ColoredFormatter(logging.Formatter):
         return message
 
 
+
+
 # =============================================================================
 # ЛОГГЕР
 # =============================================================================
@@ -102,7 +194,16 @@ def setup_logging() -> None:
     """
     Инициализирует систему логирования.
     Вызывается при старте приложения для настройки корневого логгера.
+    Может безопасно вызываться многократно (идемпотентна).
     """
+    global _LOGGING_INITIALIZED
+    
+    # Если уже инициализирован, пропускаем
+    if _LOGGING_INITIALIZED:
+        return
+    
+    _LOGGING_INITIALIZED = True
+    
     # Получаем основной логгер для инициализации всей системы
     get_logger("taxi_bot")
     
@@ -132,13 +233,27 @@ def get_logger(name: str = "taxi_bot") -> logging.Logger:
     try:
         from src.config import settings
         log_level = settings.logging.LOG_LEVEL if hasattr(settings, 'logging') else "DEBUG"
+        # Защита от MagicMock в тестах
+        if not isinstance(log_level, str):
+            log_level = "DEBUG"
+            
         log_format = settings.logging.LOG_FORMAT if hasattr(settings, 'logging') else "colored"
+        if not isinstance(log_format, str):
+            log_format = "colored"
+            
         log_to_file = settings.logging.LOG_TO_FILE if hasattr(settings, 'logging') else False
         log_file_path = settings.logging.LOG_FILE_PATH if hasattr(settings, 'logging') else "logs/app.log"
+        if not isinstance(log_file_path, str):
+            log_file_path = "logs/app.log"
+            
         log_max_bytes = settings.logging.LOG_MAX_BYTES if hasattr(settings, 'logging') else 10485760
         log_backup_count = settings.logging.LOG_BACKUP_COUNT if hasattr(settings, 'logging') else 5
-        environment = settings.system.ENVIRONMENT if hasattr(settings, 'system') else "development"
-    except Exception:
+        environment = settings.system.ENVIRONMENT if hasattr(settings, 'logging') else "development"
+        if not isinstance(environment, str):
+            environment = "development"
+            
+        run_dev_mode = settings.system.RUN_DEV_MODE if hasattr(settings, 'system') else False
+    except Exception as e:
         log_level = "DEBUG"
         log_format = "colored"
         log_to_file = False
@@ -146,46 +261,90 @@ def get_logger(name: str = "taxi_bot") -> logging.Logger:
         log_max_bytes = 10485760
         log_backup_count = 5
         environment = "development"
+        run_dev_mode = False
     
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, log_level.upper(), logging.DEBUG))
     
-    # Не добавляем хендлеры повторно
+    # Не добавляем хендлеры повторно (только если уже был настроен через наш кэш)
     if logger.handlers:
-        _loggers[name] = logger
         return logger
+
+    # Очищаем существующие хендлеры (на всякий случай)
+    logger.handlers.clear()
     
     # Консольный хендлер
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.DEBUG)
-    
-    # Выбор форматтера в зависимости от окружения
-    if environment == "production" or log_format == "json":
+    if log_format == "json":
         console_handler.setFormatter(JsonFormatter())
     else:
         console_handler.setFormatter(ColoredFormatter())
-    
     logger.addHandler(console_handler)
     
-    # Файловый хендлер (всегда включен, пишем в logs/)
-    log_path = Path("logs/app.log")
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    # Файловый хендлер (глобальный)
+    if log_to_file:
+        global _GLOBAL_FILE_HANDLER
+        if _GLOBAL_FILE_HANDLER is None:
+            # Определяем директорию логов
+            log_path = Path(log_file_path)
+            log_dir = log_path.parent
+            log_name = log_path.stem
+            
+            # Если RUN_DEV_MODE=True, удаляем старый файл лога перед созданием нового
+            if run_dev_mode:
+                full_log_path = log_dir / f"{log_name}.log"
+                try:
+                    if full_log_path.exists():
+                        full_log_path.unlink()
+                        # Также можно вывести сообщение в консоль, но логгер еще не настроен
+                        print(f"[DEV_MODE] Удален старый лог файл: {full_log_path}")
+                except Exception as e:
+                    print(f"⚠️ Ошибка при удалении старого лога: {e}")
+
+            _GLOBAL_FILE_HANDLER = DateBasedRotatingFileHandler(
+                log_dir=str(log_dir),
+                max_bytes=log_max_bytes,
+                logger_name=log_name,
+            )
+            if log_format == "json":
+                _GLOBAL_FILE_HANDLER.setFormatter(JsonFormatter())
+            else:
+                # Используем ColoredFormatter для записи цветов в файл по запросу пользователя
+                _GLOBAL_FILE_HANDLER.setFormatter(ColoredFormatter())
+        
+        logger.addHandler(_GLOBAL_FILE_HANDLER)
+
+        # Добавляем отдельный файл для ошибок (фильтрация)
+        global _GLOBAL_ERROR_HANDLER
+        if _GLOBAL_ERROR_HANDLER is None:
+            error_log_path = log_dir / "error.log"
+            # Если RUN_DEV_MODE=True, удаляем старый файл ошибок
+            if run_dev_mode:
+                try:
+                    if error_log_path.exists():
+                        error_log_path.unlink()
+                except Exception:
+                    pass
+
+            _GLOBAL_ERROR_HANDLER = DateBasedRotatingFileHandler(
+                log_dir=str(log_dir),
+                max_bytes=log_max_bytes,
+                logger_name="error",
+            )
+            _GLOBAL_ERROR_HANDLER.setLevel(logging.ERROR)
+            if log_format == "json":
+                _GLOBAL_ERROR_HANDLER.setFormatter(JsonFormatter())
+            else:
+                _GLOBAL_ERROR_HANDLER.setFormatter(ColoredFormatter())
+        
+        logger.addHandler(_GLOBAL_ERROR_HANDLER)
     
-    file_handler = RotatingFileHandler(
-        log_path,
-        maxBytes=log_max_bytes,
-        backupCount=log_backup_count,
-        encoding="utf-8",
-    )
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(JsonFormatter())
-    logger.addHandler(file_handler)
-    
-    # Предотвращаем дублирование логов
+    # Предотвращаем дублирование логов в родительских логгерах
     logger.propagate = False
     
     _loggers[name] = logger
     return logger
+
 
 
 # =============================================================================

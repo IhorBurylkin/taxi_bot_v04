@@ -363,10 +363,6 @@ class RedisClient:
             return False
 
 
-# Глобальный экземпляр
-_redis_client: RedisClient | None = None
-
-
 def get_redis() -> RedisClient:
     """
     Возвращает глобальный экземпляр RedisClient.
@@ -374,10 +370,7 @@ def get_redis() -> RedisClient:
     Returns:
         RedisClient
     """
-    global _redis_client
-    if _redis_client is None:
-        _redis_client = RedisClient()
-    return _redis_client
+    return RedisClient()
 
 
 async def init_redis() -> None:

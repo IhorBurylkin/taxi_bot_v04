@@ -146,7 +146,7 @@ class TestDatabaseManager:
     async def test_execute(self, db_manager: DatabaseManager) -> None:
         """Проверяет выполнение запроса без возврата данных."""
         mock_conn = AsyncMock()
-        mock_conn.execute.return_value = "INSERT 0 1"
+        mock_conn.execute = AsyncMock(return_value="INSERT 0 1")
         
         mock_pool = MagicMock()
         mock_pool.acquire.return_value.__aenter__.return_value = mock_conn

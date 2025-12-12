@@ -76,7 +76,7 @@ class BaseWorker(ABC):
         for event_type in self.subscriptions:
             await self.event_bus.subscribe(
                 event_type=event_type,
-                callback=self._on_event,
+                handler=self._on_event,
             )
             await log_info(
                 f"Воркер {self.name} подписан на {event_type}",

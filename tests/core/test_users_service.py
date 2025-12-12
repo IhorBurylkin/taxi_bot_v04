@@ -96,14 +96,15 @@ class TestUserService:
         mock_redis: AsyncMock,
     ) -> None:
         """Проверяет случай, когда пользователь не найден."""
-        mock_redis.get_model.return_value = None
+        mock_redis.get_model = AsyncMock(return_value=None)
         
         with patch.object(
             user_service._user_repo, 'get_by_id',
             new_callable=AsyncMock,
             return_value=None
         ):
-            result = await user_service.get_user(999999999)
+            with patch("src.common.logger.log_info", new_callable=AsyncMock):
+                result = await user_service.get_user(999999999)
         
         assert result is None
     
@@ -115,6 +116,8 @@ class TestUserService:
         sample_user_data: dict,
     ) -> None:
         """Проверяет регистрацию пользователя."""
+        mock_redis.delete = AsyncMock()
+        
         dto = UserCreateDTO(
             id=sample_user_data["id"],
             username=sample_user_data["username"],
@@ -135,7 +138,7 @@ class TestUserService:
         assert result is not None
         assert result.id == dto.id
         # Проверяем, что кэш был инвалидирован
-        mock_redis.delete.assert_called()
+        assert mock_redis.delete.called
     
     @pytest.mark.asyncio
     async def test_update_user(

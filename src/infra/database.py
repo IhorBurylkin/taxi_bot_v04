@@ -279,6 +279,31 @@ async def init_db() -> None:
         command_timeout=settings.database.DB_COMMAND_TIMEOUT,
     )
     await log_info(f"PostgreSQL подключён: {settings.database.DB_HOST}:{settings.database.DB_PORT}/{settings.database.DB_NAME}", type_msg=TypeMsg.INFO)
+    
+    # Инициализация схемы БД
+    await _init_schema(db)
+
+
+async def _init_schema(db: DatabaseManager) -> None:
+    """Выполняет начальную миграцию БД."""
+    from src.config.loader import get_project_root
+    
+    schema_path = get_project_root() / "migrations" / "init.sql"
+    if not schema_path.exists():
+        await log_error(f"Файл схемы БД не найден: {schema_path}")
+        return
+
+    try:
+        with open(schema_path, "r", encoding="utf-8") as f:
+            schema_sql = f.read()
+            
+        await log_info("Применение схемы БД...", type_msg=TypeMsg.INFO)
+        # Выполняем скрипт. asyncpg позволяет выполнять несколько команд через execute
+        await db.execute(schema_sql)
+        await log_info("Схема БД успешно применена", type_msg=TypeMsg.INFO)
+    except Exception as e:
+        await log_error(f"Ошибка при инициализации схемы БД: {e}")
+        raise
 
 
 async def close_db() -> None:

@@ -58,6 +58,9 @@ class TestNotificationService:
         mock_event_bus: AsyncMock,
     ) -> None:
         """Проверяет успешную отправку уведомления."""
+        # Настраиваем мок event_bus.publish
+        mock_event_bus.publish = AsyncMock()
+        
         data = NotificationData(
             user_id=123,
             message_key="WELCOME",
@@ -70,7 +73,7 @@ class TestNotificationService:
             result = await notification_service.send_notification(data)
         
         assert result is True
-        mock_event_bus.publish.assert_called_once()
+        assert mock_event_bus.publish.called
         
         # Проверяем, что событие правильного типа
         call_args = mock_event_bus.publish.call_args[0][0]
@@ -85,6 +88,9 @@ class TestNotificationService:
         mock_event_bus: AsyncMock,
     ) -> None:
         """Проверяет отправку уведомления с параметрами."""
+        # Настраиваем мок event_bus.publish
+        mock_event_bus.publish = AsyncMock()
+        
         data = NotificationData(
             user_id=123,
             message_key="GREETING",

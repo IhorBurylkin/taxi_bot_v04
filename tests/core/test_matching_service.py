@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -18,7 +18,7 @@ class TestDriverCandidate:
     
     def test_create_candidate(self) -> None:
         """Проверяет создание кандидата."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         candidate = DriverCandidate(
             driver_id=123,
             distance_km=2.5,
@@ -54,7 +54,7 @@ class TestMatchingService:
         mock_redis: AsyncMock,
     ) -> None:
         """Проверяет поиск при отсутствии водителей."""
-        mock_redis.georadius.return_value = []
+        mock_redis.georadius = AsyncMock(return_value=[])
         
         with patch("src.config.settings") as mock_settings:
             mock_settings.search.SEARCH_RADIUS_MAX_KM = 10.0
@@ -77,12 +77,12 @@ class TestMatchingService:
     ) -> None:
         """Проверяет успешный поиск водителей."""
         # Мокаем результат georadius
-        mock_redis.georadius.return_value = [
+        mock_redis.georadius = AsyncMock(return_value=[
             ("123", 1.5),
             ("456", 2.8),
-        ]
+        ])
         # Мокаем last_seen
-        mock_redis.get.return_value = None
+        mock_redis.get = AsyncMock(return_value=None)
         
         with patch("src.config.settings") as mock_settings:
             mock_settings.search.SEARCH_RADIUS_MAX_KM = 10.0
@@ -128,7 +128,7 @@ class TestMatchingService:
         mock_redis: AsyncMock,
     ) -> None:
         """Проверяет поиск с информацией о last_seen."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         mock_redis.georadius.return_value = [("123", 1.5)]
         mock_redis.get.return_value = now.isoformat()
         

@@ -97,6 +97,9 @@ class TestBillingService:
         mock_event_bus: AsyncMock,
     ) -> None:
         """Проверяет успешную обработку платежа."""
+        # Настраиваем мок event_bus.publish
+        mock_event_bus.publish = AsyncMock()
+        
         with patch.object(
             billing_service, '_record_transaction',
             new_callable=AsyncMock,
@@ -117,7 +120,7 @@ class TestBillingService:
         assert result.success is True
         assert result.transaction_id == "txn_123"
         # Проверяем, что событие было опубликовано
-        mock_event_bus.publish.assert_called()
+        assert mock_event_bus.publish.called
     
     @pytest.mark.asyncio
     async def test_process_order_payment_cash_no_balance_update(
@@ -179,6 +182,9 @@ class TestBillingService:
         mock_event_bus: AsyncMock,
     ) -> None:
         """Проверяет обработку исключения."""
+        # Настраиваем мок event_bus.publish чтобы не вызывал исключение
+        mock_event_bus.publish = AsyncMock()
+        
         with patch.object(
             billing_service, '_record_transaction',
             new_callable=AsyncMock,
@@ -195,7 +201,7 @@ class TestBillingService:
         assert result.success is False
         assert "Database error" in result.error_message
         # Проверяем, что событие об ошибке было опубликовано
-        mock_event_bus.publish.assert_called()
+        assert mock_event_bus.publish.called
     
     @pytest.mark.asyncio
     async def test_get_driver_balance_success(
