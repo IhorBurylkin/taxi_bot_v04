@@ -12,12 +12,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-class UserRole(str, Enum):
-    """Роль пользователя."""
-    RIDER = "rider"
-    DRIVER = "driver"
-    ADMIN = "admin"
-
+from src.shared.models.enums import UserRole
 
 class DriverStatus(str, Enum):
     """Статус водителя."""
@@ -37,7 +32,7 @@ class UserDTO(BaseModel):
     last_name: str | None = None
     phone: str | None = None
     language_code: str = "en"
-    role: UserRole = UserRole.RIDER
+    role: UserRole = UserRole.PASSENGER
     is_active: bool = True
     is_blocked: bool = False
     created_at: datetime | None = None
@@ -92,7 +87,7 @@ class UserCreateRequest(BaseModel):
     last_name: str | None = None
     phone: str | None = None
     language_code: str = "en"
-    role: UserRole = UserRole.RIDER
+    role: UserRole = UserRole.PASSENGER
 
 
 class DriverCreateRequest(BaseModel):

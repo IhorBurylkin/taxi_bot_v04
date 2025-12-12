@@ -290,16 +290,21 @@ def get_logger(name: str = "taxi_bot") -> logging.Logger:
             log_dir = log_path.parent
             log_name = log_path.stem
             
+            # Если задана переменная окружения SERVICE_NAME, добавляем её к имени лога
+            service_name = os.getenv("SERVICE_NAME")
+            if service_name:
+                log_name = f"{log_name}_{service_name}"
+
             # Если RUN_DEV_MODE=True, удаляем старый файл лога перед созданием нового
-            if run_dev_mode:
-                full_log_path = log_dir / f"{log_name}.log"
-                try:
-                    if full_log_path.exists():
-                        full_log_path.unlink()
-                        # Также можно вывести сообщение в консоль, но логгер еще не настроен
-                        print(f"[DEV_MODE] Удален старый лог файл: {full_log_path}")
-                except Exception as e:
-                    print(f"⚠️ Ошибка при удалении старого лога: {e}")
+            # if run_dev_mode:
+            #     full_log_path = log_dir / f"{log_name}.log"
+            #     try:
+            #         if full_log_path.exists():
+            #             full_log_path.unlink()
+            #             # Также можно вывести сообщение в консоль, но логгер еще не настроен
+            #             print(f"[DEV_MODE] Удален старый лог файл: {full_log_path}")
+            #     except Exception as e:
+            #         print(f"⚠️ Ошибка при удалении старого лога: {e}")
 
             _GLOBAL_FILE_HANDLER = DateBasedRotatingFileHandler(
                 log_dir=str(log_dir),
@@ -319,12 +324,12 @@ def get_logger(name: str = "taxi_bot") -> logging.Logger:
         if _GLOBAL_ERROR_HANDLER is None:
             error_log_path = log_dir / "error.log"
             # Если RUN_DEV_MODE=True, удаляем старый файл ошибок
-            if run_dev_mode:
-                try:
-                    if error_log_path.exists():
-                        error_log_path.unlink()
-                except Exception:
-                    pass
+            # if run_dev_mode:
+            #     try:
+            #         if error_log_path.exists():
+            #             error_log_path.unlink()
+            #     except Exception:
+            #         pass
 
             _GLOBAL_ERROR_HANDLER = DateBasedRotatingFileHandler(
                 log_dir=str(log_dir),

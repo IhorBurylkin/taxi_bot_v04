@@ -156,7 +156,7 @@ class PricingService:
             await self._redis.set(
                 cache_key,
                 json.dumps(tariff),
-                ex=self.TARIFF_CACHE_TTL,
+                ttl=self.TARIFF_CACHE_TTL,
             )
             
             return tariff

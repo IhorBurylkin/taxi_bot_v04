@@ -138,10 +138,10 @@ class TripService:
         
         # Кэшируем активные поездки
         if trip.status not in [TripStatus.COMPLETED, TripStatus.CANCELLED, TripStatus.EXPIRED]:
-            await self._redis.set(
+            await self._redis.set_model(
                 cache_key,
-                trip.model_dump_json(),
-                ex=settings.redis_ttl.ORDER_TTL,
+                trip,
+                ttl=settings.redis_ttl.ORDER_TTL,
             )
         
         return trip

@@ -106,6 +106,18 @@ start_app() {
     
     # Запускаем приложение в фоне
     log_info "Запуск entrypoint_all.py..."
+    
+    # Экспорт переменных для локальной разработки
+    export USERS_SERVICE_HOST=localhost
+    export TRIP_SERVICE_HOST=localhost
+    export PRICING_SERVICE_HOST=localhost
+    export PAYMENTS_SERVICE_HOST=localhost
+    export MINIAPP_BFF_HOST=localhost
+    export REALTIME_WS_GATEWAY_HOST=localhost
+    export REALTIME_LOCATION_INGEST_HOST=localhost
+    export ORDER_MATCHING_SERVICE_HOST=localhost
+    export SERVICE_NAME=dev_run
+    
     nohup python "$PROJECT_DIR/entrypoint_all.py" > "$PROJECT_DIR/logs/dev_run.log" 2>&1 &
     local pid=$!
     

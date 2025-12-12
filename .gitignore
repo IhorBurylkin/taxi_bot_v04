@@ -14,3 +14,5 @@ __pycache__/
 *.yml
 .env
 .coverage
+/archive
+/.venv

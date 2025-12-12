@@ -14,7 +14,7 @@ from typing import Any, AsyncGenerator, Callable, TypeVar
 import asyncpg
 from asyncpg import Connection, Pool, Record
 
-from src.common.logger import get_logger, log_error, log_info
+from src.common.logger import get_logger, log_error, log_info, log_warning
 from src.common.constants import TypeMsg
 
 logger = get_logger("database")
@@ -298,12 +298,21 @@ async def _init_schema(db: DatabaseManager) -> None:
             schema_sql = f.read()
             
         await log_info("Применение схемы БД...", type_msg=TypeMsg.INFO)
-        # Выполняем скрипт. asyncpg позволяет выполнять несколько команд через execute
-        await db.execute(schema_sql)
+        
+        # Используем advisory lock для предотвращения одновременного запуска миграций
+        # 123456789 - произвольный ID для лока
+        async with db.acquire() as conn:
+            await conn.execute("SELECT pg_advisory_xact_lock(123456789)")
+            await conn.execute(schema_sql)
+            
         await log_info("Схема БД успешно применена", type_msg=TypeMsg.INFO)
     except Exception as e:
         await log_error(f"Ошибка при инициализации схемы БД: {e}")
-        raise
+        # Не рейзим ошибку, если это deadlock или duplicate, так как это может быть гонка при старте
+        if "deadlock detected" in str(e) or "already exists" in str(e):
+             await log_warning(f"Игнорируем ошибку инициализации (гонка процессов): {e}")
+        else:
+             raise
 
 
 async def close_db() -> None:

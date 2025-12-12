@@ -73,20 +73,28 @@ class DeploymentSettings(BaseModel):
     NGINX_PORT: int = 8080
     
     # Новые микросервисы (v0.5.0)
+    USERS_SERVICE_HOST: str = "users_service"
     USERS_SERVICE_PORT: int = 8084
     USERS_SERVICE_INSTANCES_COUNT: int = 1
+    TRIP_SERVICE_HOST: str = "trip_service"
     TRIP_SERVICE_PORT: int = 8085
     TRIP_SERVICE_INSTANCES_COUNT: int = 1
+    PRICING_SERVICE_HOST: str = "pricing_service"
     PRICING_SERVICE_PORT: int = 8086
     PRICING_SERVICE_INSTANCES_COUNT: int = 1
+    PAYMENTS_SERVICE_HOST: str = "payments_service"
     PAYMENTS_SERVICE_PORT: int = 8087
     PAYMENTS_SERVICE_INSTANCES_COUNT: int = 1
+    MINIAPP_BFF_HOST: str = "miniapp_bff"
     MINIAPP_BFF_PORT: int = 8088
     MINIAPP_BFF_INSTANCES_COUNT: int = 1
+    REALTIME_WS_GATEWAY_HOST: str = "realtime_ws_gateway"
     REALTIME_WS_GATEWAY_PORT: int = 8089
     REALTIME_WS_GATEWAY_INSTANCES_COUNT: int = 1
+    REALTIME_LOCATION_INGEST_HOST: str = "realtime_location_ingest"
     REALTIME_LOCATION_INGEST_PORT: int = 8090
     REALTIME_LOCATION_INGEST_INSTANCES_COUNT: int = 1
+    ORDER_MATCHING_SERVICE_HOST: str = "order_matching_service"
     ORDER_MATCHING_SERVICE_PORT: int = 8091
     ORDER_MATCHING_SERVICE_INSTANCES_COUNT: int = 1
 
@@ -303,18 +311,19 @@ class StarsSettings(BaseModel):
 
 class FareSettings(BaseModel):
     """Настройки тарифов."""
-    BASE_FARE: float = 50.0
-    FARE_PER_KM: float = 12.0
+    BASE_FARE: float = 10.0
+    FARE_PER_KM: float = 1.0
     FARE_PER_MINUTE: float = 3.0
     PICKUP_FARE: float = 30.0
-    WAITING_FARE_PER_MINUTE: float = 5.0
-    MIN_FARE: float = 80.0
+    WAITING_FARE_PER_MINUTE: float = 0.25
+    MIN_FARE: float = 10.0
     SURGE_MULTIPLIER_MAX: float = 3.0
-    CURRENCY: str = "UAH"
+    CURRENCY: str = "EUR"
 
 
 class SearchSettings(BaseModel):
     """Настройки поиска водителей."""
+    DRIVER_SEARCH_RADIUS_KM: float = 5.0
     SEARCH_RADIUS_MIN_KM: float = 1.0
     SEARCH_RADIUS_MAX_KM: float = 10.0
     SEARCH_RADIUS_STEP_KM: float = 1.0
@@ -387,10 +396,34 @@ class Settings(BaseSettings):
                 COMPONENT_MODE=os.getenv("COMPONENT_MODE", filtered_data.get("COMPONENT_MODE", "all")),
             ),
             deployment=DeploymentSettings(
-                WEB_INSTANCES_COUNT=filtered_data.get("WEB_INSTANCES_COUNT", 1),
-                WEB_BASE_PORT=filtered_data.get("WEB_BASE_PORT", 8080),
+                WEB_ADMIN_INSTANCES_COUNT=filtered_data.get("WEB_ADMIN_INSTANCES_COUNT", 1),
+                WEB_ADMIN_PORT=filtered_data.get("WEB_ADMIN_PORT", 8081),
+                WEB_CLIENT_INSTANCES_COUNT=filtered_data.get("WEB_CLIENT_INSTANCES_COUNT", 1),
+                WEB_CLIENT_PORT=filtered_data.get("WEB_CLIENT_PORT", 8082),
+                NOTIFICATIONS_INSTANCES_COUNT=filtered_data.get("NOTIFICATIONS_INSTANCES_COUNT", 1),
+                NOTIFICATIONS_PORT=filtered_data.get("NOTIFICATIONS_PORT", 8083),
                 BOT_INSTANCES_COUNT=filtered_data.get("BOT_INSTANCES_COUNT", 1),
+                BOT_WEBAPP_PORT=filtered_data.get("BOT_WEBAPP_PORT", 8000),
                 WORKER_INSTANCES_COUNT=filtered_data.get("WORKER_INSTANCES_COUNT", 1),
+                MATCHING_WORKER_INSTANCES_COUNT=filtered_data.get("MATCHING_WORKER_INSTANCES_COUNT", 1),
+                NGINX_PORT=filtered_data.get("NGINX_PORT", 8080),
+                
+                USERS_SERVICE_HOST=os.getenv("USERS_SERVICE_HOST", filtered_data.get("USERS_SERVICE_HOST", "users_service")),
+                USERS_SERVICE_PORT=filtered_data.get("USERS_SERVICE_PORT", 8084),
+                TRIP_SERVICE_HOST=os.getenv("TRIP_SERVICE_HOST", filtered_data.get("TRIP_SERVICE_HOST", "trip_service")),
+                TRIP_SERVICE_PORT=filtered_data.get("TRIP_SERVICE_PORT", 8085),
+                PRICING_SERVICE_HOST=os.getenv("PRICING_SERVICE_HOST", filtered_data.get("PRICING_SERVICE_HOST", "pricing_service")),
+                PRICING_SERVICE_PORT=filtered_data.get("PRICING_SERVICE_PORT", 8086),
+                PAYMENTS_SERVICE_HOST=os.getenv("PAYMENTS_SERVICE_HOST", filtered_data.get("PAYMENTS_SERVICE_HOST", "payments_service")),
+                PAYMENTS_SERVICE_PORT=filtered_data.get("PAYMENTS_SERVICE_PORT", 8087),
+                MINIAPP_BFF_HOST=os.getenv("MINIAPP_BFF_HOST", filtered_data.get("MINIAPP_BFF_HOST", "miniapp_bff")),
+                MINIAPP_BFF_PORT=filtered_data.get("MINIAPP_BFF_PORT", 8088),
+                REALTIME_WS_GATEWAY_HOST=os.getenv("REALTIME_WS_GATEWAY_HOST", filtered_data.get("REALTIME_WS_GATEWAY_HOST", "realtime_ws_gateway")),
+                REALTIME_WS_GATEWAY_PORT=filtered_data.get("REALTIME_WS_GATEWAY_PORT", 8089),
+                REALTIME_LOCATION_INGEST_HOST=os.getenv("REALTIME_LOCATION_INGEST_HOST", filtered_data.get("REALTIME_LOCATION_INGEST_HOST", "realtime_location_ingest")),
+                REALTIME_LOCATION_INGEST_PORT=filtered_data.get("REALTIME_LOCATION_INGEST_PORT", 8090),
+                ORDER_MATCHING_SERVICE_HOST=os.getenv("ORDER_MATCHING_SERVICE_HOST", filtered_data.get("ORDER_MATCHING_SERVICE_HOST", "order_matching_service")),
+                ORDER_MATCHING_SERVICE_PORT=filtered_data.get("ORDER_MATCHING_SERVICE_PORT", 8091),
             ),
             logging=LoggingSettings(
                 LOG_TO_FILE=filtered_data.get("LOG_TO_FILE", True),
@@ -476,16 +509,20 @@ class Settings(BaseSettings):
                 WITHDRAWAL_MIN_STARS=filtered_data.get("WITHDRAWAL_MIN_STARS", 500),
             ),
             fares=FareSettings(
-                BASE_FARE=filtered_data.get("BASE_FARE", 50.0),
-                FARE_PER_KM=filtered_data.get("FARE_PER_KM", 12.0),
-                FARE_PER_MINUTE=filtered_data.get("FARE_PER_MINUTE", 3.0),
-                PICKUP_FARE=filtered_data.get("PICKUP_FARE", 30.0),
-                WAITING_FARE_PER_MINUTE=filtered_data.get("WAITING_FARE_PER_MINUTE", 5.0),
-                MIN_FARE=filtered_data.get("MIN_FARE", 80.0),
-                SURGE_MULTIPLIER_MAX=filtered_data.get("SURGE_MULTIPLIER_MAX", 3.0),
-                CURRENCY=filtered_data.get("CURRENCY", "UAH"),
+                BASE_FARE_FIRST_5KM=filtered_data.get("BASE_FARE_FIRST_5KM", 10.0),
+                FARE_PER_KM_AFTER_5=filtered_data.get("FARE_PER_KM_AFTER_5", 1.0),
+                PICKUP_FREE_DISTANCE_KM=filtered_data.get("PICKUP_FREE_DISTANCE_KM", 5.0),
+                PICKUP_FARE_PER_KM=filtered_data.get("PICKUP_FARE_PER_KM", 0.5),
+                NIGHT_FEE=filtered_data.get("NIGHT_FEE", 5.0),
+                NIGHT_START_HOUR=filtered_data.get("NIGHT_START_HOUR", 23),
+                NIGHT_END_HOUR=filtered_data.get("NIGHT_END_HOUR", 6),
+                WAITING_FREE_MINUTES=filtered_data.get("WAITING_FREE_MINUTES", 5),
+                WAITING_FARE_PER_MINUTE=filtered_data.get("WAITING_FARE_PER_MINUTE", 0.25),
+                MOVEMENT_THRESHOLD_METERS=filtered_data.get("MOVEMENT_THRESHOLD_METERS", 200.0),
+                CURRENCY=filtered_data.get("CURRENCY", "EUR"),
             ),
             search=SearchSettings(
+                DRIVER_SEARCH_RADIUS_KM=filtered_data.get("DRIVER_SEARCH_RADIUS_KM", 5.0),
                 SEARCH_RADIUS_MIN_KM=filtered_data.get("SEARCH_RADIUS_MIN_KM", 1.0),
                 SEARCH_RADIUS_MAX_KM=filtered_data.get("SEARCH_RADIUS_MAX_KM", 10.0),
                 SEARCH_RADIUS_STEP_KM=filtered_data.get("SEARCH_RADIUS_STEP_KM", 1.0),

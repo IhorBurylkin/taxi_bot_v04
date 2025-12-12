@@ -62,11 +62,11 @@ class UserService:
         
         # Читаем из БД
         query = """
-            SELECT id, telegram_id, username, first_name, last_name,
-                   phone, language_code, role, is_active, is_blocked,
+            SELECT id, username, first_name, last_name,
+                   phone, language, role, is_active, is_blocked,
                    created_at, updated_at
-            FROM users
-            WHERE telegram_id = $1
+            FROM users_schema.users
+            WHERE id = $1
         """
         row = await self._db.fetchrow(query, telegram_id)
         
@@ -75,12 +75,12 @@ class UserService:
         
         user = UserDTO(
             id=row["id"],
-            telegram_id=row["telegram_id"],
+            telegram_id=row["id"],
             username=row["username"],
             first_name=row["first_name"],
             last_name=row["last_name"],
             phone=row["phone"],
-            language_code=row["language_code"],
+            language_code=row["language"],
             role=UserRole(row["role"]),
             is_active=row["is_active"],
             is_blocked=row["is_blocked"],
@@ -89,10 +89,10 @@ class UserService:
         )
         
         # Кэшируем
-        await self._redis.set(
+        await self._redis.set_model(
             cache_key,
-            user.model_dump_json(),
-            ex=settings.redis_ttl.PROFILE_TTL,
+            user,
+            ttl=settings.redis_ttl.PROFILE_TTL,
         )
         
         return user
@@ -100,12 +100,12 @@ class UserService:
     async def create_user(self, request: UserCreateRequest) -> UserDTO:
         """Создание нового пользователя."""
         query = """
-            INSERT INTO users (telegram_id, username, first_name, last_name, 
-                              phone, language_code, role, is_active, is_blocked,
+            INSERT INTO users_schema.users (id, username, first_name, last_name, 
+                              phone, language, role, is_active, is_blocked,
                               created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, true, false, NOW(), NOW())
-            RETURNING id, telegram_id, username, first_name, last_name,
-                      phone, language_code, role, is_active, is_blocked,
+            RETURNING id, username, first_name, last_name,
+                      phone, language, role, is_active, is_blocked,
                       created_at, updated_at
         """
         
@@ -122,12 +122,12 @@ class UserService:
         
         user = UserDTO(
             id=row["id"],
-            telegram_id=row["telegram_id"],
+            telegram_id=row["id"],
             username=row["username"],
             first_name=row["first_name"],
             last_name=row["last_name"],
             phone=row["phone"],
-            language_code=row["language_code"],
+            language_code=row["language"],
             role=UserRole(row["role"]),
             is_active=row["is_active"],
             is_blocked=row["is_blocked"],
@@ -138,11 +138,11 @@ class UserService:
         # Публикуем событие
         event = UserRegistered(
             user_id=user.id,
-            telegram_id=user.telegram_id,
+            telegram_id=user.id,
             username=user.username,
             first_name=user.first_name,
             last_name=user.last_name,
-            language_code=user.language_code,
+            language_code=user.language,
             role=user.role.value,
         )
         await self._event_bus.publish(event.event_type, event.to_json())
@@ -168,7 +168,11 @@ class UserService:
         values = []
         idx = 1
         
-        allowed_fields = {"username", "first_name", "last_name", "phone", "language_code"}
+        # Map language_code to language if present
+        if "language_code" in updates:
+            updates["language"] = updates.pop("language_code")
+
+        allowed_fields = {"username", "first_name", "last_name", "phone", "language"}
         for key, value in updates.items():
             if key in allowed_fields:
                 set_parts.append(f"{key} = ${idx}")
@@ -182,11 +186,11 @@ class UserService:
         values.append(telegram_id)
         
         query = f"""
-            UPDATE users
+            UPDATE users_schema.users
             SET {", ".join(set_parts)}
-            WHERE telegram_id = ${idx}
-            RETURNING id, telegram_id, username, first_name, last_name,
-                      phone, language_code, role, is_active, is_blocked,
+            WHERE id = ${idx}
+            RETURNING id, username, first_name, last_name,
+                      phone, language, role, is_active, is_blocked,
                       created_at, updated_at
         """
         
@@ -197,12 +201,12 @@ class UserService:
         
         user = UserDTO(
             id=row["id"],
-            telegram_id=row["telegram_id"],
+            telegram_id=row["id"],
             username=row["username"],
             first_name=row["first_name"],
             last_name=row["last_name"],
             phone=row["phone"],
-            language_code=row["language_code"],
+            language_code=row["language"],
             role=UserRole(row["role"]),
             is_active=row["is_active"],
             is_blocked=row["is_blocked"],
@@ -229,11 +233,11 @@ class UserService:
     ) -> Optional[UserDTO]:
         """Блокировка пользователя."""
         query = """
-            UPDATE users
+            UPDATE users_schema.users
             SET is_blocked = true, updated_at = NOW()
-            WHERE telegram_id = $1
-            RETURNING id, telegram_id, username, first_name, last_name,
-                      phone, language_code, role, is_active, is_blocked,
+            WHERE id = $1
+            RETURNING id, username, first_name, last_name,
+                      phone, language, role, is_active, is_blocked,
                       created_at, updated_at
         """
         
@@ -244,12 +248,12 @@ class UserService:
         
         user = UserDTO(
             id=row["id"],
-            telegram_id=row["telegram_id"],
+            telegram_id=row["id"],
             username=row["username"],
             first_name=row["first_name"],
             last_name=row["last_name"],
             phone=row["phone"],
-            language_code=row["language_code"],
+            language_code=row["language"],
             role=UserRole(row["role"]),
             is_active=row["is_active"],
             is_blocked=row["is_blocked"],
@@ -277,11 +281,11 @@ class UserService:
     async def unblock_user(self, telegram_id: int) -> Optional[UserDTO]:
         """Разблокировка пользователя."""
         query = """
-            UPDATE users
+            UPDATE users_schema.users
             SET is_blocked = false, updated_at = NOW()
-            WHERE telegram_id = $1
-            RETURNING id, telegram_id, username, first_name, last_name,
-                      phone, language_code, role, is_active, is_blocked,
+            WHERE id = $1
+            RETURNING id, username, first_name, last_name,
+                      phone, language, role, is_active, is_blocked,
                       created_at, updated_at
         """
         
@@ -292,12 +296,12 @@ class UserService:
         
         user = UserDTO(
             id=row["id"],
-            telegram_id=row["telegram_id"],
+            telegram_id=row["id"],
             username=row["username"],
             first_name=row["first_name"],
             last_name=row["last_name"],
             phone=row["phone"],
-            language_code=row["language_code"],
+            language_code=row["language"],
             role=UserRole(row["role"]),
             is_active=row["is_active"],
             is_blocked=row["is_blocked"],
@@ -346,14 +350,13 @@ class DriverService:
             return DriverDTO.model_validate_json(cached)
         
         query = """
-            SELECT u.id as user_id, u.telegram_id, u.username, u.first_name, 
+            SELECT u.id as user_id, u.username, u.first_name, 
                    u.last_name, u.phone,
-                   d.status, d.is_verified, d.is_working,
-                   d.current_lat, d.current_lon, d.last_location_update,
-                   d.car_model, d.car_color, d.car_number,
-                   d.rating, d.total_trips, d.balance_stars
-            FROM users u
-            JOIN drivers d ON u.id = d.user_id
+                   d.is_verified, d.is_working,
+                   d.car_model, d.car_color, d.car_plate as car_number,
+                   d.rating, d.total_trips
+            FROM users_schema.users u
+            JOIN users_schema.driver_profiles d ON u.id = d.user_id
             WHERE u.id = $1
         """
         
@@ -362,32 +365,35 @@ class DriverService:
         if not row:
             return None
         
+        # Determine status from is_working
+        status = DriverStatus.ONLINE if row["is_working"] else DriverStatus.OFFLINE
+        
         driver = DriverDTO(
             user_id=row["user_id"],
-            telegram_id=row["telegram_id"],
+            telegram_id=row["user_id"],
             username=row["username"],
             first_name=row["first_name"],
             last_name=row["last_name"],
             phone=row["phone"],
-            status=DriverStatus(row["status"]) if row["status"] else DriverStatus.OFFLINE,
+            status=status,
             is_verified=row["is_verified"],
             is_working=row["is_working"],
-            current_lat=row["current_lat"],
-            current_lon=row["current_lon"],
-            last_location_update=row["last_location_update"],
+            current_lat=0.0, # Not in DB
+            current_lon=0.0, # Not in DB
+            last_location_update=None, # Not in DB
             car_model=row["car_model"],
             car_color=row["car_color"],
             car_number=row["car_number"],
-            rating=row["rating"] or 5.0,
+            rating=float(row["rating"]) if row["rating"] else 5.0,
             total_trips=row["total_trips"] or 0,
-            balance_stars=row["balance_stars"] or 0,
+            balance_stars=0, # Moved to payments service
         )
         
         # Кэшируем
-        await self._redis.set(
+        await self._redis.set_model(
             cache_key,
-            driver.model_dump_json(),
-            ex=settings.redis_ttl.PROFILE_TTL,
+            driver,
+            ttl=settings.redis_ttl.PROFILE_TTL,
         )
         
         return driver
@@ -396,20 +402,20 @@ class DriverService:
         """Регистрация водителя."""
         # Обновляем роль пользователя
         await self._db.execute(
-            "UPDATE users SET role = 'driver' WHERE id = $1",
+            "UPDATE users_schema.users SET role = 'driver' WHERE id = $1",
             request.user_id,
         )
         
         # Создаём запись водителя
         query = """
-            INSERT INTO drivers (user_id, car_model, car_color, car_number,
-                                status, is_verified, is_working, rating,
-                                total_trips, balance_stars, created_at)
-            VALUES ($1, $2, $3, $4, 'offline', false, false, 5.0, 0, 0, NOW())
+            INSERT INTO users_schema.driver_profiles (user_id, car_model, car_color, car_plate,
+                                is_verified, is_working, rating,
+                                total_trips, created_at)
+            VALUES ($1, $2, $3, $4, false, false, 5.0, 0, NOW())
             ON CONFLICT (user_id) DO UPDATE
             SET car_model = EXCLUDED.car_model,
                 car_color = EXCLUDED.car_color,
-                car_number = EXCLUDED.car_number
+                car_plate = EXCLUDED.car_plate
             RETURNING user_id
         """
         
@@ -426,8 +432,8 @@ class DriverService:
     async def set_online(self, driver_id: int) -> Optional[DriverDTO]:
         """Перевести водителя в онлайн."""
         query = """
-            UPDATE drivers
-            SET status = 'online', is_working = true
+            UPDATE users_schema.driver_profiles
+            SET is_working = true
             WHERE user_id = $1
             RETURNING user_id
         """
@@ -452,8 +458,8 @@ class DriverService:
     async def set_offline(self, driver_id: int) -> Optional[DriverDTO]:
         """Перевести водителя в оффлайн."""
         query = """
-            UPDATE drivers
-            SET status = 'offline', is_working = false
+            UPDATE users_schema.driver_profiles
+            SET is_working = false
             WHERE user_id = $1
             RETURNING user_id
         """
@@ -499,7 +505,7 @@ class DriverService:
         await self._redis.set(
             f"driver:{driver_id}:last_seen",
             datetime.now(timezone.utc).isoformat(),
-            ex=settings.redis_ttl.LAST_SEEN_TTL,
+            ttl=settings.redis_ttl.LAST_SEEN_TTL,
         )
         
         # Публикуем в Redis Pub/Sub для realtime_ws_gateway

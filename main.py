@@ -248,7 +248,7 @@ async def run_web_admin() -> None:
     from src.web_admin.app import run_web as start_web_admin
     
     await log_info("Запуск Web Admin UI...", type_msg=TypeMsg.INFO)
-    start_web_admin(
+    await start_web_admin(
         host=settings.telegram.WEBAPP_HOST,
         port=settings.deployment.WEB_ADMIN_PORT,
     )
@@ -259,7 +259,7 @@ async def run_web_client() -> None:
     from src.web_client.app import run_web_client as start_web_client
     
     await log_info("Запуск Web Client UI...", type_msg=TypeMsg.INFO)
-    start_web_client(
+    await start_web_client(
         host=settings.telegram.WEBAPP_HOST,
         port=settings.deployment.WEB_CLIENT_PORT,
     )
@@ -270,7 +270,7 @@ async def run_notifications() -> None:
     from src.notifications.app import run_notifications as start_notifications
     
     await log_info("Запуск Notifications сервиса...", type_msg=TypeMsg.INFO)
-    start_notifications(
+    await start_notifications(
         host=settings.telegram.WEBAPP_HOST,
         port=settings.deployment.NOTIFICATIONS_PORT,
     )
@@ -478,7 +478,7 @@ async def run_order_matching_service() -> None:
     )
     
     config = uvicorn.Config(
-        "src.services.order_matching.app:app",
+        "src.services.order_matching_service.app:app",
         host="0.0.0.0",
         port=settings.deployment.ORDER_MATCHING_SERVICE_PORT,
         reload=settings.system.DEBUG,

@@ -196,7 +196,7 @@ async def send_push_notification(notification: PushNotification) -> dict:
 # ЗАПУСК
 # =============================================================================
 
-def run_notifications(
+async def run_notifications(
     host: str = "0.0.0.0",
     port: int = 8083,
     reload: bool = False,
@@ -211,10 +211,12 @@ def run_notifications(
     """
     import uvicorn
     
-    uvicorn.run(
+    config = uvicorn.Config(
         "src.notifications.app:app",
         host=host,
         port=port,
         reload=reload,
         log_level="info",
     )
+    server = uvicorn.Server(config)
+    await server.serve()

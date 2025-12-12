@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from src.infra.redis_client import RedisClient
     from src.infra.event_bus import EventBus
 
+from src.services.payments.repository import PaymentRepository
 
 class PaymentService:
     """
@@ -53,6 +54,7 @@ class PaymentService:
         self.db = db
         self.redis = redis
         self.event_bus = event_bus
+        self.repository = PaymentRepository(db)
         
         # Константы из конфига (будут загружаться через DI)
         self.platform_commission_percent: float = 15.0
@@ -329,23 +331,21 @@ class PaymentService:
     
     async def _save_payment(self, payment: PaymentDTO) -> None:
         """Сохранить платёж в БД."""
-        # TODO: Реализовать SQL INSERT
-        pass
+        await self.repository.save_payment(payment)
     
     async def _update_payment(self, payment: PaymentDTO) -> None:
         """Обновить платёж в БД."""
-        # TODO: Реализовать SQL UPDATE
+        await self.repository.save_payment(payment)
         # Инвалидируем кэш
         await self.redis.delete(f"payment:{payment.id}")
     
     async def _get_payment_from_db(self, payment_id: str) -> PaymentDTO | None:
         """Получить платёж из БД."""
-        # TODO: Реализовать SQL SELECT
-        return None
+        return await self.repository.get_payment(payment_id)
     
     async def _get_payments_by_trip_from_db(self, trip_id: str) -> list[PaymentDTO]:
         """Получить платежи по поездке из БД."""
-        # TODO: Реализовать SQL SELECT
+        # TODO: Add method to repository
         return []
     
     async def _get_payments_by_user_from_db(
@@ -356,7 +356,7 @@ class PaymentService:
         offset: int,
     ) -> list[PaymentDTO]:
         """Получить платежи пользователя из БД."""
-        # TODO: Реализовать SQL SELECT
+        # TODO: Add method to repository
         return []
     
     async def _credit_driver_balance(
@@ -366,7 +366,16 @@ class PaymentService:
         payment_id: str,
     ) -> None:
         """Начислить баланс водителю."""
-        # TODO: Реализовать SQL UPDATE + INSERT в историю
+        # 1. Update Wallet
+        await self.repository.update_balance(driver_id, float(amount_stars))
+        # 2. Create Transaction
+        await self.repository.create_transaction(
+            wallet_id=driver_id,
+            amount=float(amount_stars),
+            transaction_type="payment",
+            description=f"Payment for {payment_id}",
+            status="success"
+        )
         # Инвалидируем кэш
         await self.redis.delete(f"driver_balance:{driver_id}")
     
@@ -377,19 +386,37 @@ class PaymentService:
         reason: str,
     ) -> None:
         """Списать с баланса водителя."""
-        # TODO: Реализовать SQL UPDATE + INSERT в историю
+        # 1. Update Wallet (negative amount)
+        await self.repository.update_balance(driver_id, -float(amount_stars))
+        # 2. Create Transaction
+        await self.repository.create_transaction(
+            wallet_id=driver_id,
+            amount=-float(amount_stars),
+            transaction_type="refund",
+            description=reason,
+            status="success"
+        )
         # Инвалидируем кэш
         await self.redis.delete(f"driver_balance:{driver_id}")
     
     async def _get_driver_balance_from_db(self, driver_id: int) -> dict:
         """Получить баланс водителя из БД."""
-        # TODO: Реализовать SQL SELECT
+        wallet = await self.repository.get_wallet(driver_id)
+        if not wallet:
+            return {
+                "driver_id": driver_id,
+                "total_earned": 0,
+                "available": 0,
+                "pending": 0,
+                "withdrawn": 0,
+            }
+        
         return {
             "driver_id": driver_id,
-            "total_earned": 0,
-            "available": 0,
+            "total_earned": float(wallet['balance']), # Simplified
+            "available": float(wallet['balance']),
             "pending": 0,
-            "withdrawn": 0,
+            "withdrawn": 0, # Need to sum withdrawals from transactions
         }
 
 
