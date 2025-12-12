@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -32,7 +32,7 @@ class UserProfileUpdated(DomainEvent):
     event_type: Literal["user.profile_updated"] = "user.profile_updated"
     
     user_id: int
-    updated_fields: dict[str, any] = Field(default_factory=dict)
+    updated_fields: dict[str, Any] = Field(default_factory=dict)
 
 
 class UserBlocked(DomainEvent):

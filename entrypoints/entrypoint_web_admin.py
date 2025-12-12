@@ -10,9 +10,11 @@ from __future__ import annotations
 import asyncio
 import sys
 import os
+from pathlib import Path
 
-# Убеждаемся что путь к модулям правильный
-sys.path.insert(0, "/app")
+# Добавляем корневую директорию проекта в путь
+project_root = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(project_root))
 
 from main import main
 

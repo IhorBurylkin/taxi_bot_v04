@@ -287,6 +287,212 @@ async def run_matching_worker() -> None:
     await start_matching_workers(init_infra=False)
 
 
+# === Микросервисы Phase 1: Core Services ===
+
+async def run_users_service() -> None:
+    """Запускает Users Service (управление профилями, водителями)."""
+    import uvicorn
+    
+    await log_info(
+        f"Запуск Users Service на порту {settings.deployment.USERS_SERVICE_PORT}...",
+        type_msg=TypeMsg.INFO
+    )
+    
+    config = uvicorn.Config(
+        "src.services.users.app:app",
+        host="0.0.0.0",
+        port=settings.deployment.USERS_SERVICE_PORT,
+        reload=settings.system.DEBUG,
+        log_level="debug" if settings.system.DEBUG else "info",
+    )
+    
+    server = uvicorn.Server(config)
+    try:
+        await server.serve()
+    except asyncio.CancelledError:
+        await log_info("Users Service: graceful shutdown", type_msg=TypeMsg.DEBUG)
+        await server.shutdown()
+
+
+async def run_trip_service() -> None:
+    """Запускает Trip Service (state machine поездок)."""
+    import uvicorn
+    
+    await log_info(
+        f"Запуск Trip Service на порту {settings.deployment.TRIP_SERVICE_PORT}...",
+        type_msg=TypeMsg.INFO
+    )
+    
+    config = uvicorn.Config(
+        "src.services.trips.app:app",
+        host="0.0.0.0",
+        port=settings.deployment.TRIP_SERVICE_PORT,
+        reload=settings.system.DEBUG,
+        log_level="debug" if settings.system.DEBUG else "info",
+    )
+    
+    server = uvicorn.Server(config)
+    try:
+        await server.serve()
+    except asyncio.CancelledError:
+        await log_info("Trip Service: graceful shutdown", type_msg=TypeMsg.DEBUG)
+        await server.shutdown()
+
+
+async def run_pricing_service() -> None:
+    """Запускает Pricing Service (расчёт тарифов, конвертация в Stars)."""
+    import uvicorn
+    
+    await log_info(
+        f"Запуск Pricing Service на порту {settings.deployment.PRICING_SERVICE_PORT}...",
+        type_msg=TypeMsg.INFO
+    )
+    
+    config = uvicorn.Config(
+        "src.services.pricing.app:app",
+        host="0.0.0.0",
+        port=settings.deployment.PRICING_SERVICE_PORT,
+        reload=settings.system.DEBUG,
+        log_level="debug" if settings.system.DEBUG else "info",
+    )
+    
+    server = uvicorn.Server(config)
+    try:
+        await server.serve()
+    except asyncio.CancelledError:
+        await log_info("Pricing Service: graceful shutdown", type_msg=TypeMsg.DEBUG)
+        await server.shutdown()
+
+
+# === Микросервисы Phase 2: Gateways ===
+
+async def run_payments_service() -> None:
+    """Запускает Payments Service (Telegram Stars, балансы, выводы)."""
+    import uvicorn
+    
+    await log_info(
+        f"Запуск Payments Service на порту {settings.deployment.PAYMENTS_SERVICE_PORT}...",
+        type_msg=TypeMsg.INFO
+    )
+    
+    config = uvicorn.Config(
+        "src.services.payments.app:app",
+        host="0.0.0.0",
+        port=settings.deployment.PAYMENTS_SERVICE_PORT,
+        reload=settings.system.DEBUG,
+        log_level="debug" if settings.system.DEBUG else "info",
+    )
+    
+    server = uvicorn.Server(config)
+    try:
+        await server.serve()
+    except asyncio.CancelledError:
+        await log_info("Payments Service: graceful shutdown", type_msg=TypeMsg.DEBUG)
+        await server.shutdown()
+
+
+async def run_miniapp_bff() -> None:
+    """Запускает MiniApp BFF (Backend for Frontend для React Mini App)."""
+    import uvicorn
+    
+    await log_info(
+        f"Запуск MiniApp BFF на порту {settings.deployment.MINIAPP_BFF_PORT}...",
+        type_msg=TypeMsg.INFO
+    )
+    
+    config = uvicorn.Config(
+        "src.services.miniapp_bff.app:app",
+        host="0.0.0.0",
+        port=settings.deployment.MINIAPP_BFF_PORT,
+        reload=settings.system.DEBUG,
+        log_level="debug" if settings.system.DEBUG else "info",
+    )
+    
+    server = uvicorn.Server(config)
+    try:
+        await server.serve()
+    except asyncio.CancelledError:
+        await log_info("MiniApp BFF: graceful shutdown", type_msg=TypeMsg.DEBUG)
+        await server.shutdown()
+
+
+# === Микросервисы Phase 3: Realtime ===
+
+async def run_realtime_ws_gateway() -> None:
+    """Запускает Realtime WebSocket Gateway (live-tracking, подписки)."""
+    import uvicorn
+    
+    await log_info(
+        f"Запуск Realtime WebSocket Gateway на порту {settings.deployment.REALTIME_WS_GATEWAY_PORT}...",
+        type_msg=TypeMsg.INFO
+    )
+    
+    config = uvicorn.Config(
+        "src.services.realtime_ws.app:app",
+        host="0.0.0.0",
+        port=settings.deployment.REALTIME_WS_GATEWAY_PORT,
+        reload=settings.system.DEBUG,
+        log_level="debug" if settings.system.DEBUG else "info",
+    )
+    
+    server = uvicorn.Server(config)
+    try:
+        await server.serve()
+    except asyncio.CancelledError:
+        await log_info("Realtime WS Gateway: graceful shutdown", type_msg=TypeMsg.DEBUG)
+        await server.shutdown()
+
+
+async def run_realtime_location_ingest() -> None:
+    """Запускает Realtime Location Ingest (приём координат, GEO индекс)."""
+    import uvicorn
+    
+    await log_info(
+        f"Запуск Realtime Location Ingest на порту {settings.deployment.REALTIME_LOCATION_INGEST_PORT}...",
+        type_msg=TypeMsg.INFO
+    )
+    
+    config = uvicorn.Config(
+        "src.services.realtime_location.app:app",
+        host="0.0.0.0",
+        port=settings.deployment.REALTIME_LOCATION_INGEST_PORT,
+        reload=settings.system.DEBUG,
+        log_level="debug" if settings.system.DEBUG else "info",
+    )
+    
+    server = uvicorn.Server(config)
+    try:
+        await server.serve()
+    except asyncio.CancelledError:
+        await log_info("Realtime Location Ingest: graceful shutdown", type_msg=TypeMsg.DEBUG)
+        await server.shutdown()
+
+
+async def run_order_matching_service() -> None:
+    """Запускает Order Matching Service (диспетчеризация, поиск водителей)."""
+    import uvicorn
+    
+    await log_info(
+        f"Запуск Order Matching Service на порту {settings.deployment.ORDER_MATCHING_SERVICE_PORT}...",
+        type_msg=TypeMsg.INFO
+    )
+    
+    config = uvicorn.Config(
+        "src.services.order_matching.app:app",
+        host="0.0.0.0",
+        port=settings.deployment.ORDER_MATCHING_SERVICE_PORT,
+        reload=settings.system.DEBUG,
+        log_level="debug" if settings.system.DEBUG else "info",
+    )
+    
+    server = uvicorn.Server(config)
+    try:
+        await server.serve()
+    except asyncio.CancelledError:
+        await log_info("Order Matching Service: graceful shutdown", type_msg=TypeMsg.DEBUG)
+        await server.shutdown()
+
+
 async def run_postgres() -> None:
     """Запускает только PostgreSQL (для локальной разработки)."""
     await log_info("PostgreSQL должен быть запущен через Docker", type_msg=TypeMsg.WARNING)
@@ -312,21 +518,35 @@ def interactive_mode_selection() -> str:
     Returns:
         Выбранный режим
     """
-    print("\n" + "="*70)
-    print("  TAXI BOT — Выбор компонента для запуска")
-    print("="*70)
-    print("\nДоступные компоненты:")
-    print("  1. bot            — Telegram Bot (основной бот)")
-    print("  2. web_admin      — Web Admin UI (панель администратора)")
-    print("  3. web_client     — Web Client UI (клиентский интерфейс)")
-    print("  4. notifications  — Notifications Service (HTTP API + NotificationWorker)")
-    print("  5. matching_worker — MatchingWorker (подбор водителей)")
-    print("  6. all            — Все компоненты одновременно")
-    print("\n  Инфраструктура (только через Docker):")
-    print("  7. postgres       — PostgreSQL (через Docker)")
-    print("  8. redis          — Redis (через Docker)")
-    print("  9. rabbitmq       — RabbitMQ (через Docker)")
-    print("\n" + "="*70)
+    print("\n" + "="*80)
+    print("  TAXI BOT v0.5.2 — Выбор компонента для запуска")
+    print("="*80)
+    print("\n🔵 Legacy компоненты:")
+    print("  1.  bot                    — Telegram Bot (основной бот)")
+    print("  2.  web_admin              — Web Admin UI (панель администратора)")
+    print("  3.  web_client             — Web Client UI (клиентский интерфейс)")
+    print("  4.  notifications          — Notifications Service (HTTP API)")
+    print("  5.  matching_worker        — MatchingWorker (deprecated, используй 18)")
+    print("\n🟢 Микросервисы Phase 1 — Core Services:")
+    print("  11. users_service          — Users Service (:8084)")
+    print("  12. trip_service           — Trip Service (:8085)")
+    print("  13. pricing_service        — Pricing Service (:8086)")
+    print("\n🟡 Микросервисы Phase 2 — Gateways:")
+    print("  14. payments_service       — Payments Service (:8087)")
+    print("  15. miniapp_bff            — MiniApp BFF (:8088)")
+    print("\n🟠 Микросервисы Phase 3 — Realtime:")
+    print("  16. realtime_ws            — Realtime WebSocket Gateway (:8089)")
+    print("  17. realtime_location      — Realtime Location Ingest (:8090)")
+    print("  18. order_matching         — Order Matching Service (:8091)")
+    print("\n🚀 Комплексный запуск:")
+    print("  20. all                    — Все legacy компоненты одновременно")
+    print("  21. microservices          — Все 8 микросервисов одновременно")
+    print("  22. everything             — Все компоненты (legacy + микросервисы)")
+    print("\n⚙️  Инфраструктура (только через Docker):")
+    print("  30. postgres               — PostgreSQL (через Docker)")
+    print("  31. redis                  — Redis (через Docker)")
+    print("  32. rabbitmq               — RabbitMQ (через Docker)")
+    print("\n" + "="*80)
     
     mode_map = {
         "1": "bot",
@@ -334,16 +554,28 @@ def interactive_mode_selection() -> str:
         "3": "web_client",
         "4": "notifications",
         "5": "matching_worker",
-        "6": "all",
-        "7": "postgres",
-        "8": "redis",
-        "9": "rabbitmq",
+        "11": "users_service",
+        "12": "trip_service",
+        "13": "pricing_service",
+        "14": "payments_service",
+        "15": "miniapp_bff",
+        "16": "realtime_ws",
+        "17": "realtime_location",
+        "18": "order_matching",
+        "20": "all",
+        "21": "microservices",
+        "22": "everything",
+        "30": "postgres",
+        "31": "redis",
+        "32": "rabbitmq",
     }
     
-    valid_modes = set(mode_map.values()) | set(mode_map.keys()) | {"web", "worker"}  # web, worker для обратной совместимости
+    # Для обратной совместимости
+    valid_modes = (set(mode_map.values()) | set(mode_map.keys()) | 
+                   {"web", "worker"})
     
     while True:
-        choice = input("\nВыберите компонент (1-6) или название: ").strip().lower()
+        choice = input("\nВыберите компонент (номер или название): ").strip().lower()
         
         if choice in mode_map:
             return mode_map[choice]
@@ -373,14 +605,21 @@ async def main(mode: str | None = None) -> None:
             # Режим разработчика: запускаем все компоненты
             mode = "all"
             await log_info(
-                "🔧 RUN_DEV_MODE включен — запуск всех компонентов",
+                "🔧 RUN_DEV_MODE включен — запуск всех legacy компонентов",
                 type_msg=TypeMsg.INFO
             )
         else:
             # Проверяем переменную окружения COMPONENT_MODE (для Docker)
             component_mode = settings.system.COMPONENT_MODE
-            valid_modes = ("bot", "web", "web_admin", "web_client", "notifications", 
-                          "matching_worker", "worker", "postgres", "redis", "rabbitmq", "all")
+            valid_modes = (
+                "bot", "web", "web_admin", "web_client", "notifications", 
+                "matching_worker", "worker",
+                "users_service", "trip_service", "pricing_service",
+                "payments_service", "miniapp_bff",
+                "realtime_ws", "realtime_location", "order_matching",
+                "postgres", "redis", "rabbitmq",
+                "all", "microservices", "everything"
+            )
             if component_mode and component_mode in valid_modes:
                 mode = component_mode
                 await log_info(
@@ -415,6 +654,7 @@ async def main(mode: str | None = None) -> None:
         else:
             await log_info("Пропуск запуска тестов (RUN_TESTS_ON_STARTUP=false)", type_msg=TypeMsg.DEBUG)
         
+        # === Legacy компоненты ===
         if mode == "bot":
             await run_bot()
         elif mode == "web":
@@ -427,12 +667,38 @@ async def main(mode: str | None = None) -> None:
             await run_notifications()
         elif mode == "matching_worker" or mode == "worker":  # worker для обратной совместимости
             await run_matching_worker()
+        
+        # === Микросервисы Phase 1: Core Services ===
+        elif mode == "users_service":
+            await run_users_service()
+        elif mode == "trip_service":
+            await run_trip_service()
+        elif mode == "pricing_service":
+            await run_pricing_service()
+        
+        # === Микросервисы Phase 2: Gateways ===
+        elif mode == "payments_service":
+            await run_payments_service()
+        elif mode == "miniapp_bff":
+            await run_miniapp_bff()
+        
+        # === Микросервисы Phase 3: Realtime ===
+        elif mode == "realtime_ws":
+            await run_realtime_ws_gateway()
+        elif mode == "realtime_location":
+            await run_realtime_location_ingest()
+        elif mode == "order_matching":
+            await run_order_matching_service()
+        
+        # === Инфраструктура ===
         elif mode == "postgres":
             await run_postgres()
         elif mode == "redis":
             await run_redis()
         elif mode == "rabbitmq":
             await run_rabbitmq()
+        
+        # === Комплексный запуск ===
         elif mode == "all":
             # Параллельный запуск всех компонентов
             # Важно: при RUN_DEV_MODE=true инфраструктура уже инициализирована выше
@@ -465,6 +731,70 @@ async def main(mode: str | None = None) -> None:
             
             # Примечание: в режиме RUN_DEV_MODE рекомендуется использовать Docker Compose
             # для запуска Web Admin, Web Client и Notifications в отдельных контейнерах
+        
+        elif mode == "microservices":
+            # Запуск всех 8 микросервисов параллельно
+            await log_info(
+                "Запуск всех микросервисов (8 сервисов: users, trips, pricing, payments, miniapp_bff, realtime_ws, realtime_location, order_matching)...",
+                type_msg=TypeMsg.INFO
+            )
+            
+            _running_tasks = [
+                asyncio.create_task(run_users_service()),
+                asyncio.create_task(run_trip_service()),
+                asyncio.create_task(run_pricing_service()),
+                asyncio.create_task(run_payments_service()),
+                asyncio.create_task(run_miniapp_bff()),
+                asyncio.create_task(run_realtime_ws_gateway()),
+                asyncio.create_task(run_realtime_location_ingest()),
+                asyncio.create_task(run_order_matching_service()),
+            ]
+            
+            try:
+                await asyncio.gather(*_running_tasks, return_exceptions=True)
+            except asyncio.CancelledError:
+                await log_info("Отмена всех микросервисов...", type_msg=TypeMsg.INFO)
+                for task in _running_tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*_running_tasks, return_exceptions=True)
+                raise
+        
+        elif mode == "everything":
+            # Запуск ВСЕХ компонентов (legacy + микросервисы)
+            await log_info(
+                "Запуск ВСЕХ компонентов (legacy + 8 микросервисов)...",
+                type_msg=TypeMsg.INFO
+            )
+            
+            _running_tasks = [
+                # Legacy
+                asyncio.create_task(run_bot()),
+                asyncio.create_task(run_matching_worker()),
+                # Микросервисы
+                asyncio.create_task(run_users_service()),
+                asyncio.create_task(run_trip_service()),
+                asyncio.create_task(run_pricing_service()),
+                asyncio.create_task(run_payments_service()),
+                asyncio.create_task(run_miniapp_bff()),
+                asyncio.create_task(run_realtime_ws_gateway()),
+                asyncio.create_task(run_realtime_location_ingest()),
+                asyncio.create_task(run_order_matching_service()),
+            ]
+            
+            try:
+                await asyncio.gather(*_running_tasks, return_exceptions=True)
+            except asyncio.CancelledError:
+                await log_info("Отмена всех компонентов...", type_msg=TypeMsg.INFO)
+                for task in _running_tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*_running_tasks, return_exceptions=True)
+                raise
+            
+            # Примечание: Web компоненты (web_admin, web_client, notifications)
+            # должны быть запущены в отдельных процессах/контейнерах
+        
         else:
             await log_error(f"Неизвестный режим: {mode}")
             
@@ -497,33 +827,51 @@ async def main(mode: str | None = None) -> None:
 def print_usage() -> None:
     """Выводит справку по использованию."""
     print("""
-Taxi Bot — Модульный монолит для такси-сервиса
+Taxi Bot v0.5.2 — Микросервисная архитектура для такси-сервиса
 
 Использование:
     python main.py [mode]
 
-Режимы:
-    bot            — Запуск Telegram Bot
-    web_admin      — Запуск Web Admin UI (панель администратора)
-    web_client     — Запуск Web Client UI (клиентский интерфейс)
-    notifications  — Запуск Notifications Service (HTTP API + NotificationWorker)
-    matching_worker — Запуск MatchingWorker (подбор водителей)
-    all            — Запуск всех компонентов одновременно
+🔵 Legacy компоненты:
+    bot                    — Telegram Bot
+    web_admin              — Web Admin UI (панель администратора)
+    web_client             — Web Client UI (клиентский интерфейс)
+    notifications          — Notifications Service (HTTP API)
+    matching_worker        — MatchingWorker (deprecated, используй order_matching)
+
+🟢 Микросервисы Phase 1 — Core Services:
+    users_service          — Users Service (:8084)
+    trip_service           — Trip Service (:8085)
+    pricing_service        — Pricing Service (:8086)
+
+🟡 Микросервисы Phase 2 — Gateways:
+    payments_service       — Payments Service (:8087)
+    miniapp_bff            — MiniApp BFF (:8088)
+
+🟠 Микросервисы Phase 3 — Realtime:
+    realtime_ws            — Realtime WebSocket Gateway (:8089)
+    realtime_location      — Realtime Location Ingest (:8090)
+    order_matching         — Order Matching Service (:8091)
+
+🚀 Комплексный запуск:
+    all                    — Все legacy компоненты
+    microservices          — Все 8 микросервисов
+    everything             — Все компоненты (legacy + микросервисы)
     
-Инфраструктура (только через Docker):
-    postgres       — PostgreSQL database
-    redis          — Redis cache
-    rabbitmq       — RabbitMQ message broker
+⚙️  Инфраструктура (только через Docker):
+    postgres               — PostgreSQL database
+    redis                  — Redis cache
+    rabbitmq               — RabbitMQ message broker
 
 Примеры:
-    python main.py                  # Автоматический режим
-    python main.py bot              # Только Telegram Bot
-    python main.py web_admin        # Только Admin UI
-    python main.py web_client       # Только Client UI
-    python main.py matching_worker  # Только MatchingWorker
+    python main.py                       # Автоматический режим
+    python main.py bot                   # Только Telegram Bot
+    python main.py users_service         # Только Users Service
+    python main.py microservices         # Все микросервисы
+    python main.py everything            # Все компоненты
     
 Docker:
-    docker-compose up -d
+    docker-compose -f docker-compose.infra.yml -f docker-compose.services.yml up -d
     """)
 
 
@@ -536,8 +884,19 @@ if __name__ == "__main__":
         if arg in ("--help", "-h"):
             print_usage()
             sys.exit(0)
-        elif arg in ("bot", "web", "web_admin", "web_client", "notifications", 
-                     "matching_worker", "worker", "postgres", "redis", "rabbitmq", "all"):
+        elif arg in (
+            # Legacy
+            "bot", "web", "web_admin", "web_client", "notifications", 
+            "matching_worker", "worker",
+            # Микросервисы
+            "users_service", "trip_service", "pricing_service",
+            "payments_service", "miniapp_bff",
+            "realtime_ws", "realtime_location", "order_matching",
+            # Инфраструктура
+            "postgres", "redis", "rabbitmq",
+            # Комплексный запуск
+            "all", "microservices", "everything"
+        ):
             mode = arg
         else:
             print(f"Ошибка: неизвестный режим '{arg}'")

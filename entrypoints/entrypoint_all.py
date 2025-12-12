@@ -10,9 +10,11 @@ from __future__ import annotations
 import asyncio
 import sys
 import signal
+from pathlib import Path
 
-# Убеждаемся что путь к модулям правильный
-sys.path.insert(0, "/app")
+# Добавляем корневую директорию проекта в путь
+project_root = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(project_root))
 
 from main import main
 
@@ -23,7 +25,7 @@ if __name__ == "__main__":
     print("Для остановки используйте Ctrl+C")
     
     try:
-        asyncio.run(main(mode="all"))
+        asyncio.run(main(mode="everything"))
     except KeyboardInterrupt:
         print("\nПолучен сигнал остановки, завершение работы...")
     except Exception as e:

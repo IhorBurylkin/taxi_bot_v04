@@ -10,9 +10,11 @@ Entrypoint для Payments Service.
 
 import os
 import sys
+from pathlib import Path
 
-# Добавляем корень проекта в PYTHONPATH
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Добавляем корневую директорию проекта в путь
+project_root = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(project_root))
 
 import uvicorn
 

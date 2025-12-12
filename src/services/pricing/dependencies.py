@@ -45,11 +45,11 @@ async def close_dependencies() -> None:
     from src.common.constants import TypeMsg
     
     if _redis:
-        await _redis.close()
+        await _redis.disconnect()
         await log_info("Redis отключён", type_msg=TypeMsg.DEBUG)
     
     if _db:
-        await _db.close()
+        await _db.disconnect()
         await log_info("PostgreSQL отключён", type_msg=TypeMsg.DEBUG)
 
 
